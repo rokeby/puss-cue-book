@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>Puss Cue Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: prompt-book. Segment rail (with stills) on the left, the running script of cues on the right; on a phone the rail becomes a strip. */
+:root {
+  color-scheme: light;
+  --paper: #f2f3ef; --sheet: #fbfbf8; --ink: #1c201e; --muted: #5d655f; --rule: #d9dcd4;
+  --accent: #2c6a58; --accent-ink: #ffffff; --standby: #b8741a; --cut: #9a3b30;
+  --chip-light: #f3e6c9; --chip-light-ink: #6e4a0c;
+  --chip-sound: #d5ece6; --chip-sound-ink: #1d5446;
+  --chip-video: #e3def3; --chip-video-ink: #4a3b7a;
+  --chip-action: #e7e6e0; --chip-action-ink: #4b4a42;
+  --line-klara: #8a3b5c; --line-gary: #2f5a8a; --line-cameron: #6b5a1c;
+  --shadow: 0 1px 0 rgba(0,0,0,.04), 0 6px 18px -10px rgba(20,30,25,.25);
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --paper: #121513; --sheet: #191d1b; --ink: #e6e9e3; --muted: #9aa39b; --rule: #2c322e;
+  --accent: #5fb89c; --accent-ink: #0d1411; --standby: #e0a24c; --cut: #e07a6c;
+  --chip-light: #3a2f19; --chip-light-ink: #f0cf8c;
+  --chip-sound: #173029; --chip-sound-ink: #8fd8c2;
+  --chip-video: #28233d; --chip-video-ink: #c4b7f2;
+  --chip-action: #2a2c28; --chip-action-ink: #c9c8bd;
+  --line-klara: #e28fb2; --line-gary: #8fb8e8; --line-cameron: #d8c171;
+  --shadow: 0 1px 0 rgba(0,0,0,.3), 0 8px 22px -12px rgba(0,0,0,.7);
+  color-scheme: dark } }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { height: 100%; margin: 0 }
+body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body); }
+button, input, textarea, select { font: inherit; color: inherit }
+button { cursor: pointer }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+.app { display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); height: 100%; }
+header.top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 20px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); border-bottom: 1px solid var(--rule); background: var(--sheet); }
+.brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0 }
+.brand h1 { font: 800 22px/1 var(--display); letter-spacing: -.01em; margin: 0 }
+.brand small { color: var(--muted); font-size: 12px }
+.filters { display: flex; flex-wrap: wrap; gap: 6px }
+.fchip { border: 1px solid var(--rule); background: transparent; border-radius: 999px; padding: 3px 11px; font-size: 13px; color: var(--muted) }
+.fchip[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
+.search { border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 5px 10px; width: 180px; min-width: 0 }
+.tbtn { border: 1px solid var(--rule); background: transparent; border-radius: 8px; padding: 5px 11px; font-size: 13px }
+
+.savebar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 20px; font-size: 13px; border-bottom: 1px solid var(--rule); background: var(--paper) }
+.savebar .state { display: flex; align-items: center; gap: 7px; font-weight: 500 }
+.savebar .who { color: var(--muted); margin-left: auto }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none }
+.dot.ok { background: var(--accent) } .dot.busy { background: var(--standby) } .dot.bad { background: var(--cut) }
+.savebar.bad { background: color-mix(in srgb, var(--cut) 12%, var(--paper)) }
+.savebar.busy { background: color-mix(in srgb, var(--standby) 10%, var(--paper)) }
+
+nav.rail { overflow-y: auto; border-right: 1px solid var(--rule); padding: 12px; display: flex; flex-direction: column; gap: 6px; background: var(--paper) }
+.seg { display: grid; grid-template-columns: 64px minmax(0,1fr); gap: 10px; align-items: center; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 6px }
+.seg:hover { background: var(--sheet) }
+.seg[aria-current="true"] { background: var(--sheet); border-color: var(--rule); box-shadow: var(--shadow) }
+.thumb { width: 64px; aspect-ratio: 16/9; border-radius: 5px; background: #0b0d0c center/cover no-repeat; display: grid; place-items: center; color: #6c736d; font: 500 10px var(--mono) }
+.seg b { display: block; font: 600 14px/1.25 var(--body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.seg span { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums }
+.seg .hit { color: var(--accent); font-weight: 600 }
+
+main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
+.hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: end; padding-block: 22px 18px; max-width: 1100px }
+.still { position: relative; margin: 0; aspect-ratio: 16/9; max-width: 100%; border-radius: 10px; background: #0b0d0c center/cover no-repeat; box-shadow: var(--shadow); overflow: hidden }
+.still figcaption { position: absolute; left: 8px; bottom: 8px; font: 500 11px var(--mono); color: #e9ece6; background: rgba(0,0,0,.55); padding: 2px 7px; border-radius: 4px }
+.still.empty { display: grid; place-items: center; aspect-ratio: auto; min-height: 96px; background: transparent; border: 1px dashed var(--rule); box-shadow: none; color: var(--muted); font-size: 13px; text-align: center; padding: 16px }
+.hero .eyebrow { font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.hero h2 { font: 800 clamp(28px, 4vw, 44px)/1.02 var(--display); letter-spacing: -.02em; margin: 6px 0 10px; text-wrap: balance }
+.hero p { color: var(--muted); margin: 0 0 14px; max-width: 46ch }
+.stepper { display: flex; gap: 8px; flex-wrap: wrap }
+.stepper button { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 7px 14px }
+.stepper button:disabled { opacity: .4; cursor: default }
+
+.cues { display: flex; flex-direction: column; gap: 10px; max-width: 1100px }
+.empty-state { border: 1px dashed var(--rule); border-radius: 12px; padding: 28px; color: var(--muted); max-width: 640px }
+.cue { display: grid; grid-template-columns: 74px minmax(0,1fr); background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden }
+.cue.cut { opacity: .55 }
+.cue.cut .body > :not(.meta) { text-decoration: line-through }
+.cue.pending { border-color: var(--standby) }
+.cue.conflict { border-color: var(--cut); border-width: 2px }
+.cue.web .num::after { content: "new"; display: block; margin-top: 4px; font: 500 10px var(--mono); color: var(--standby); letter-spacing: .06em; text-transform: uppercase }
+.num { padding: 12px 10px; border-right: 1px solid var(--rule); font: 500 12px/1.3 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums }
+.num strong { display: block; font: 500 18px/1.1 var(--mono); color: var(--ink) }
+.body { padding: 12px 14px; min-width: 0; display: flex; flex-direction: column; gap: 7px }
+.line { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px }
+.line .who { font: 600 11px/1.9 var(--body); letter-spacing: .08em; text-transform: uppercase }
+.line .txt { font-size: 16px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere }
+.line.klara .who { color: var(--line-klara) } .line.gary .who { color: var(--line-gary) } .line.cameron .who { color: var(--line-cameron) }
+.depts { display: flex; flex-wrap: wrap; gap: 6px }
+.dchip { border-radius: 6px; padding: 3px 9px; font-size: 13px; line-height: 1.4; max-width: 100%; overflow-wrap: anywhere; white-space: pre-wrap }
+.dchip i { font-style: normal; font: 600 10px var(--body); letter-spacing: .08em; text-transform: uppercase; margin-right: 6px; opacity: .8 }
+.d-light { background: var(--chip-light); color: var(--chip-light-ink) }
+.d-soundTech, .d-soundCue { background: var(--chip-sound); color: var(--chip-sound-ink) }
+.d-videoCue { background: var(--chip-video); color: var(--chip-video-ink) }
+.d-action, .d-beats { background: var(--chip-action); color: var(--chip-action-ink) }
+.note { font-size: 13px; color: var(--muted); border-left: 2px solid var(--standby); padding-left: 9px; white-space: pre-wrap; overflow-wrap: anywhere }
+.note b { color: var(--ink); font-weight: 600 }
+.meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted) }
+.meta .acts { display: flex; gap: 6px }
+.pill { font: 600 11px var(--body); letter-spacing: .04em; border-radius: 999px; padding: 1px 8px; background: var(--standby); color: var(--sheet) }
+.pill.bad { background: var(--cut) }
+.lnk { border: 0; background: transparent; color: var(--accent); padding: 2px 4px; font-size: 13px; font-weight: 500 }
+.blankcue { color: var(--muted); font-style: italic; font-size: 14px }
+
+.editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px }
+.editor label { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); min-width: 0 }
+.editor label.wide { grid-column: 1 / -1 }
+.editor textarea { min-height: 38px; resize: vertical; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
+.editor .row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.btn { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 6px 14px; font-weight: 500 }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+.btn.danger { color: var(--cut) }
+.warn { grid-column: 1 / -1; border: 1px solid var(--standby); border-radius: 8px; padding: 8px 10px; font-size: 13px }
+.ro { font-size: 13px; color: var(--muted) }
+.wide { grid-column: 1 / -1 }
+
+.conf { display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--cut); border-radius: 8px; padding: 10px; font-size: 14px }
+.conf h4 { margin: 0; font: 600 14px var(--body); color: var(--cut) }
+.conf .pair { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px }
+.conf .pair div { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0 }
+.conf .pair b { display: block; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted) }
+
+.panel { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(400px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); padding: 14px; z-index: 5; display: flex; flex-direction: column; gap: 10px }
+.panel h3 { margin: 0; font: 700 16px var(--display) }
+.panel ol { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px }
+.panel li { border-top: 1px solid var(--rule); padding-top: 7px }
+.panel .when { color: var(--muted); font-size: 12px }
+.panel .rowb { display: flex; flex-wrap: wrap; gap: 8px }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--sheet); padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 6; max-width: calc(100vw - 32px) }
+
+.gate { position: fixed; inset: 0; background: var(--paper); display: grid; place-items: center; padding: 16px; z-index: 10 }
+.gate form { width: min(420px, 100%); display: flex; flex-direction: column; gap: 12px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 14px; padding: 24px; box-shadow: var(--shadow) }
+.gate h1 { font: 800 30px/1 var(--display); margin: 0 }
+.gate p { margin: 0; color: var(--muted) }
+.gate label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; font-size: 14px }
+.gate input, .gate select { border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 8px 10px }
+.gate .err { color: var(--cut); font-size: 14px }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(0, 1fr) }
+  header.top { padding-inline: 16px }
+  .savebar { padding-inline: 16px }
+  .search { width: 100%; order: 5 }
+  nav.rail { flex-direction: row; overflow-x: auto; overflow-y: hidden; border-right: 0; border-bottom: 1px solid var(--rule); padding: 8px 16px }
+  .seg { grid-template-columns: 1fr; min-width: 112px; gap: 4px }
+  .thumb { width: 100% }
+  main { padding-inline: 16px }
+  .hero { grid-template-columns: minmax(0, 1fr) }
+  .cue { grid-template-columns: 54px minmax(0,1fr) }
+  .num { padding: 10px 6px }
+  .line { grid-template-columns: minmax(0, 1fr); gap: 0 }
+  .editor, .conf .pair { grid-template-columns: minmax(0, 1fr) }
+}
+</style>
+</head>
+<body>
+<div class="gate" id="gate" hidden>
+  <form id="gateForm">
+    <h1>Puss Cue Book</h1>
+    <p>The working cue list for Puss. Edits are saved for everyone.</p>
+    <label for="gName">Your name
+      <select id="gName" required>
+        <option value="">Choose…</option>
+        <option>Klara</option><option>Cameron</option><option>Gary</option><option>Kirke</option><option value="_other">Someone else…</option>
+      </select>
+    </label>
+    <label for="gOther" id="gOtherWrap" hidden>Name<input id="gOther" autocomplete="name"></label>
+    <label for="gPass">Passcode (from Gary)<input id="gPass" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="gErr" hidden></div>
+    <button class="btn primary" type="submit" id="gGo">Open the cue list</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>Puss Cue Book</h1><small id="subtitle">Show 17 Oct · first rehearsal 13 Oct</small></div>
+    <div class="filters" role="group" aria-label="Show only">
+      <button class="fchip" data-f="all" aria-pressed="true">Everything</button>
+      <button class="fchip" data-f="klara" aria-pressed="false">Klara's lines</button>
+      <button class="fchip" data-f="gary" aria-pressed="false">Gary's lines</button>
+      <button class="fchip" data-f="cameron" aria-pressed="false">Cameron's lines</button>
+      <button class="fchip" data-f="sound" aria-pressed="false">Sound</button>
+      <button class="fchip" data-f="light" aria-pressed="false">Light</button>
+      <button class="fchip" data-f="notes" aria-pressed="false">Has notes</button>
+    </div>
+    <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
+    <button id="logBtn" class="tbtn" aria-expanded="false">Changes</button>
+    <button id="bakBtn" class="tbtn" aria-expanded="false">Backup</button>
+  </header>
+  <div class="savebar" id="savebar" role="status" aria-live="polite">
+    <span class="state"><span class="dot" id="dot"></span><span id="stateTxt">Connecting…</span></span>
+    <span id="stateMore" class="ro"></span>
+    <button class="lnk" id="retryBtn" hidden>Retry now</button>
+    <span class="who" id="whoTxt"></span>
+  </div>
+  <nav class="rail" id="rail" aria-label="Segments"></nav>
+  <main id="main">
+    <section class="hero" id="hero"></section>
+    <div class="cues" id="cues">
+      <div class="empty-state">Loading the cue list… Each segment of the show appears on the left with a still, and its cues appear here. Click any cue to edit it, or add a cue after it.</div>
+    </div>
+  </main>
+</div>
+
+<aside class="panel" id="log" hidden><h3>Recent changes</h3><ol id="logList"></ol></aside>
+<aside class="panel" id="bak" hidden>
+  <h3>Backup</h3>
+  <p class="ro">Everything is saved to the shared cue list as you go, and every change is kept in its history. These are extra copies for your own computer.</p>
+  <div class="rowb">
+    <button class="btn" id="dlJson">Download backup (.json)</button>
+    <button class="btn" id="dlCsv">Download as spreadsheet (.csv)</button>
+  </div>
+  <p class="ro">Restore from a backup file: you'll see every cue that differs from the current list before anything changes. Restored text is saved as ordinary edits, so the text it replaces stays in the change history.</p>
+  <label class="btn" for="upFile" style="align-self:flex-start">Choose a backup file…<input id="upFile" type="file" accept=".json,application/json" hidden></label>
+  <div id="upResult" class="ro"></div>
+</aside>
+<div class="toast" id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script>
+(() => {
+  "use strict";
+  const FIELDS = [
+    ["klara", "Klara speaks"], ["gary", "Gary speaks"], ["cameron", "Cameron speaks"],
+    ["light", "Light"], ["soundTech", "Sound tech"], ["soundCue", "Sound cue"],
+    ["action", "Action"], ["videoCue", "Video cue"], ["beats", "Beats"], ["notes", "Notes"]
+  ];
+  const FKEYS = FIELDS.map(f => f[0]);
+  const LABEL = Object.fromEntries(FIELDS);
+  const SPEAKERS = ["klara", "gary", "cameron"];
+  const DEPTS = ["light", "soundTech", "soundCue", "action", "videoCue", "beats"];
+  const DEPT_SHORT = { light: "Light", soundTech: "Sound tech", soundCue: "Sound", action: "Action", videoCue: "Video", beats: "Beats" };
+  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["director", "Director notes"], ["cut", "Cut"]];
+  // Segment name in the shared Sheet -> still captured in Unreal. Captioned with the Unreal id so a mismatch is visible.
+  const STILLS = [
+    [/^passage 1\b/i, "P01", "8 Oct"], [/^s(cene)? ?1\b/i, "S1", "8 Oct"],
+    [/^passage 2\b/i, "P02", "8 Oct"], [/^scene 2\b/i, "S2", "8 Oct"],
+    [/^passage 3\b/i, "P03", "8 Oct"], [/^scene 3\b/i, "S3", "8 Oct"],
+    [/^passage 4\b/i, "P04", "7 Oct"], [/^scene 4\b/i, "S4", "8 Oct"],
+    [/^passage 5\b/i, "P05", "7 Oct"], [/^passage 6\b/i, "P06", "7 Oct"]
+  ];
+  const POLL_MS = 20000;
+
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ls = {
+    get(k, d) { try { const v = localStorage.getItem("cuebook." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("cuebook." + k, JSON.stringify(v)); return true; } catch { return false; } },
+    del(k) { try { localStorage.removeItem("cuebook." + k); } catch {} }
+  };
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+  // ------------------------------------------------------------ state
+  let who = ls.get("who", ""), pass = ls.get("pass", "");
+  const client = ls.get("client", null) || (() => { const c = uid().slice(0, 12); ls.set("client", c); return c; })();
+  let server = [];                 // cues as the server last told us
+  let outbox = ls.get("outbox", []);   // writes not yet acknowledged; survives reloads and closed tabs
+  let conflicts = ls.get("conflicts", {});  // key -> {op, items:[{field, theirs, yours, base}]}
+  let drafts = ls.get("drafts", {});        // key -> {base, draft} while a cue is open
+  let segments = [], current = ls.get("seg", 0), filter = ls.get("filter", "all"), query = "";
+  let editingKey = null, lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
+  let log = [];
+
+  function saveOutbox() { if (!ls.set("outbox", outbox)) toast("This browser can't keep unsent changes. Keep this tab open until the bar says Saved."); }
+  function saveConflicts() { ls.set("conflicts", conflicts); }
+  function saveDrafts() { ls.set("drafts", drafts); }
+
+  // ------------------------------------------------------------ server
+  async function call(req) {
+    const api = window.CUEBOOK_API;
+    if (!api) throw Object.assign(new Error("No server address set in config.js"), { code: "config" });
+    if (typeof api === "function") return api(Object.assign({ pass }, req));     // test harness
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
+    try {
+      // text/plain keeps this a "simple" request: no CORS preflight, which Apps Script cannot answer.
+      const r = await fetch(api, { method: "POST", body: JSON.stringify(Object.assign({ pass }, req)), signal: ctl.signal, redirect: "follow" });
+      if (!r.ok) throw Object.assign(new Error("Server answered " + r.status), { code: "network" });
+      return await r.json();
+    } catch (e) {
+      if (!e.code) e.code = "network";
+      throw e;
+    } finally { clearTimeout(t); }
+  }
+
+  async function refresh() {
+    if (!pass) return;
+    try {
+      const res = await call({ action: "list" });
+      if (!res.ok) return handleRefused(res);
+      server = res.cues; lastSync = Date.now(); lastError = "";
+      buildSegments();
+      if (editingKey && !refresh.shownDraft) {          // an unsaved draft from last time: open its segment
+        refresh.shownDraft = true;
+        const i = segments.findIndex(s => s.cues.some(c => c.key === editingKey));
+        if (i >= 0) current = i;
+      }
+      render(); updateBar();
+    } catch (e) { lastError = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection."; updateBar(); }
+  }
+
+  function handleRefused(res) {
+    if (res.code === "wrong_passcode") { pass = ""; ls.del("pass"); showGate("That passcode didn't work. Ask Gary for the current one."); }
+    else { lastError = res.message || "The server refused the request."; updateBar(); }
+  }
+
+  // Sends queued writes one at a time, oldest first. A write leaves the queue only when the server has
+  // acknowledged it (or returned a conflict, which is kept for the person to decide). Retries are safe:
+  // every write carries an op id and the server ignores a repeat.
+  async function flush() {
+    if (flushing || !outbox.length || !pass) return;
+    flushing = true; updateBar();
+    try {
+      while (outbox.length) {
+        const op = outbox[0];
+        let res;
+        try { res = await call(op); }
+        catch (e) { lastError = "Offline: changes are kept on this device and will be sent when the connection is back."; scheduleRetry(); return; }
+        if (res.ok) {
+          outbox.shift(); saveOutbox();
+          if (res.cue) upsert(res.cue);
+          delete conflicts[op.key]; saveConflicts();
+        } else if (res.code === "conflict") {
+          outbox.shift(); saveOutbox();
+          conflicts[op.key] = { op, items: res.conflicts }; saveConflicts();
+          if (res.cue) upsert(res.cue);
+          toast("Someone else changed " + op.key + " too. Choose which version to keep.");
+        } else if (res.code === "wrong_passcode") { handleRefused(res); return; }
+        else {
+          // the server is up but refused this write: keep it visible, never drop it silently
+          outbox.shift(); saveOutbox();
+          conflicts[op.key] = { op, items: [], error: res.message || res.code }; saveConflicts();
+        }
+        backoff = 2000; lastError = "";
+      }
+      lastSync = Date.now();
+    } finally { flushing = false; buildSegments(); render(); updateBar(); }
+  }
+  function scheduleRetry() {
+    clearTimeout(retryTimer);
+    retryAt = Date.now() + backoff;
+    retryTimer = setTimeout(() => { flush(); }, backoff);
+    backoff = Math.min(backoff * 2, 60000);
+    updateBar();
+  }
+  function upsert(cue) { const i = server.findIndex(c => c.key === cue.key); if (i >= 0) server[i] = cue; else server.push(cue); }
+  function queue(op) { op.op = uid(); op.who = who; op.client = client; outbox.push(op); saveOutbox(); buildSegments(); render(); updateBar(); flush(); }
+
+  // What the page shows = the server's list with this device's unsent writes laid on top.
+  function view() {
+    const map = new Map(server.map(c => [c.key, Object.assign({}, c)]));
+    for (const op of outbox) {
+      if (op.action === "save" && map.has(op.key)) { Object.assign(map.get(op.key), op.patch); map.get(op.key)._pending = true; }
+      if (op.action === "add" && !map.has(op.key)) {
+        const after = map.get(op.after);
+        const c = { key: op.key, ord: (after ? after.ord : 0) + 0.001, origin: "web", num: "", cut: false, director: "", _pending: true };
+        FKEYS.forEach(f => c[f] = (op.fields || {})[f] || ""); map.set(op.key, c);
+      }
+    }
+    return [...map.values()].sort((a, b) => a.ord - b.ord);
+  }
+
+  // ------------------------------------------------------------ segments and filters
+  let cues = [];
+  function buildSegments() {
+    cues = view();
+    segments = [];
+    let seg = { label: "Prologue", cues: [] }; segments.push(seg);
+    for (const c of cues) {
+      const v = (c.videoCue || "").trim();
+      if (v && !c.cut) { seg = { label: v.split("\n")[0], cues: [] }; segments.push(seg); }
+      seg.cues.push(c);
+    }
+    if (!segments[0].cues.length) segments.shift();
+    segments.forEach((s, i) => {
+      const next = segments[i + 1];
+      s.title = /^transition$/i.test(s.label) ? "Transition" + (next ? " → " + next.label : "") : s.label;
+      const m = STILLS.find(([re]) => re.test(s.label));
+      s.still = m ? { id: m[1], date: m[2] } : null;
+    });
+    if (current >= segments.length) current = Math.max(0, segments.length - 1);
+  }
+  function matches(c) {
+    if (filter === "klara" && !c.klara) return false;
+    if (filter === "gary" && !c.gary) return false;
+    if (filter === "cameron" && !c.cameron) return false;
+    if (filter === "sound" && !c.soundTech && !c.soundCue) return false;
+    if (filter === "light" && !c.light) return false;
+    if (filter === "notes" && !c.notes && !c.director) return false;
+    if (query && !(FKEYS.map(k => c[k] || "").join(" ") + " " + (c.director || "") + " " + c.key).toLowerCase().includes(query)) return false;
+    return true;
+  }
+
+  // ------------------------------------------------------------ rendering
+  function updateBar() {
+    const bar = $("savebar"), dot = $("dot"), txt = $("stateTxt"), more = $("stateMore");
+    const n = outbox.length, nc = Object.keys(conflicts).length;
+    const openDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    let kind = "ok", t = "All changes saved", m = lastSync ? "Up to date " + clock(lastSync) : "";
+    if (n) { kind = "busy"; t = flushing ? `Saving ${n} change${n > 1 ? "s" : ""}…` : `${n} change${n > 1 ? "s" : ""} waiting to send`; m = "Kept on this device until the server confirms."; }
+    if (lastError) { kind = n ? "bad" : "bad"; t = n ? `${n} change${n > 1 ? "s" : ""} not sent yet` : "Not connected"; m = lastError + (retryAt > Date.now() ? " Trying again at " + clock(retryAt) + "." : ""); }
+    if (nc) {
+      kind = "bad";
+      const decide = `${nc} cue${nc > 1 ? "s" : ""} need${nc > 1 ? "" : "s"} your decision (outlined in red)`;
+      t = n || lastError ? t + " · " + decide : decide;
+      if (!n && !lastError) m = "Your version is kept on this device until you choose.";
+    }
+    if (openDirty && !n && !lastError) { kind = "busy"; t = "Editing: press Save to send"; m = "Your typing is kept on this device until then."; }
+    bar.className = "savebar " + kind; dot.className = "dot " + kind; txt.textContent = t; more.textContent = m;
+    $("retryBtn").hidden = !(n && lastError);
+    $("whoTxt").textContent = who ? "Editing as " + who : "";
+  }
+  const clock = t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  function ago(t) { t = Number(t); if (!t) return ""; const d = (Date.now() - t) / 1000; if (d < 60) return "just now"; if (d < 3600) return Math.round(d / 60) + " min ago"; if (d < 86400) return Math.round(d / 3600) + " h ago"; return new Date(t).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); }
+
+  function renderRail() {
+    const rail = $("rail"); rail.textContent = "";
+    const filtering = filter !== "all" || query;
+    segments.forEach((s, i) => {
+      const b = el("button", "seg"); b.type = "button";
+      b.setAttribute("aria-current", i === current ? "true" : "false");
+      const th = el("div", "thumb");
+      if (s.still) th.style.backgroundImage = `url("stills/${s.still.id}.jpg")`; else th.textContent = "no still";
+      const tx = el("div"); tx.style.minWidth = "0";
+      tx.append(el("b", null, s.title));
+      const n = s.cues.filter(matches).length;
+      tx.append(el("span", n && filtering ? "hit" : null, filtering ? `${n} of ${s.cues.length} cues` : `${s.cues.length} cues`));
+      b.append(th, tx); b.onclick = () => go(i); rail.append(b);
+    });
+  }
+
+  function renderHero() {
+    const h = $("hero"); h.textContent = "";
+    const s = segments[current]; if (!s) return;
+    const fig = el("figure", "still");
+    if (s.still) { fig.style.backgroundImage = `url("stills/${s.still.id}.jpg")`; fig.append(el("figcaption", null, `Unreal ${s.still.id} · captured ${s.still.date}`)); }
+    else { fig.classList.add("empty"); fig.textContent = /transition/i.test(s.title) ? "Transition: lights out between segments" : "No still for this segment yet"; }
+    const side = el("div");
+    side.append(el("div", "eyebrow", `Segment ${current + 1} of ${segments.length}`), el("h2", null, s.title));
+    const lines = s.cues.filter(c => SPEAKERS.some(k => c[k])).length;
+    side.append(el("p", null, `${s.cues.length} cues, ${lines} with spoken lines. Click a cue to edit it.`));
+    const st = el("div", "stepper");
+    const prev = el("button", null, "← Previous"); prev.disabled = current === 0; prev.onclick = () => go(current - 1);
+    const next = el("button", null, "Next →"); next.disabled = current >= segments.length - 1; next.onclick = () => go(current + 1);
+    st.append(prev, next); side.append(st); h.append(fig, side);
+  }
+
+  function cueView(c) {
+    const card = el("article", "cue" + (c.cut ? " cut" : "") + (c.origin === "web" ? " web" : "") + (c._pending ? " pending" : "") + (conflicts[c.key] ? " conflict" : ""));
+    card.id = "cue-" + c.key;
+    const num = el("div", "num"); num.append(el("strong", null, c.num || "·"), document.createTextNode(c.key)); card.append(num);
+    const body = el("div", "body"); card.append(body);
+    if (conflicts[c.key]) body.append(conflictView(c));
+    if (editingKey === c.key) { body.append(editorView(c)); return card; }
+    let any = false;
+    for (const k of SPEAKERS) if (c[k]) { any = true; const l = el("div", "line " + k); l.append(el("div", "who", k), el("div", "txt", c[k])); body.append(l); }
+    const dz = el("div", "depts");
+    for (const k of DEPTS) if (c[k]) { any = true; const ch = el("span", "dchip d-" + k); ch.append(el("i", null, DEPT_SHORT[k]), document.createTextNode(c[k])); dz.append(ch); }
+    if (dz.childNodes.length) body.append(dz);
+    if (c.notes) { any = true; const n = el("div", "note"); n.append(el("b", null, "Note: "), document.createTextNode(c.notes)); body.append(n); }
+    if (c.director) { any = true; const n = el("div", "note"); n.append(el("b", null, "Gary (director): "), document.createTextNode(c.director)); body.append(n); }
+    if (!any) body.append(el("div", "blankcue", "Empty cue"));
+    const meta = el("div", "meta");
+    const left = el("span");
+    if (c._pending) left.append(el("span", "pill", "Saving…"), document.createTextNode(" "));
+    if (drafts[c.key]) left.append(el("span", "pill", "Unsaved draft"), document.createTextNode(" "));
+    left.append(document.createTextNode(c.updatedAt ? `Changed ${ago(c.updatedAt)} by ${c.updatedBy || "someone"}` : (c.origin === "web" ? "" : "From the shared Sheet")));
+    meta.append(left);
+    const acts = el("div", "acts");
+    const e = el("button", "lnk", drafts[c.key] ? "Continue editing" : "Edit"); e.onclick = ev => { ev.stopPropagation(); startEdit(c); };
+    const a = el("button", "lnk", "Add cue after"); a.onclick = ev => { ev.stopPropagation(); addAfter(c); };
+    acts.append(e, a); meta.append(acts); body.append(meta);
+    card.style.cursor = "pointer";
+    card.onclick = ev => { if (ev.target.closest("button, .conf") || String(getSelection())) return; startEdit(c); };
+    return card;
+  }
+
+  function conflictView(c) {
+    const info = conflicts[c.key];
+    const box = el("div", "conf");
+    if (info.error) {
+      box.append(el("h4", null, "This change was not saved"), el("div", null, info.error));
+      const keep = el("button", "btn", "Dismiss"); keep.onclick = () => { delete conflicts[c.key]; saveConflicts(); render(); updateBar(); };
+      box.append(keep); return box;
+    }
+    box.append(el("h4", null, "Someone else changed this cue while you were editing"));
+    for (const it of info.items) {
+      const f = it.field === "cut" ? "Cut" : LABEL[it.field] || it.field;
+      const pair = el("div", "pair");
+      const t = el("div"); t.append(el("b", null, f + ": theirs (saved now)"), document.createTextNode(fmt(it.theirs)));
+      const y = el("div"); y.append(el("b", null, f + ": yours (not saved)"), document.createTextNode(fmt(it.yours)));
+      pair.append(t, y); box.append(pair);
+    }
+    const row = el("div", "rowb");
+    const mine = el("button", "btn primary", "Keep mine");
+    mine.onclick = () => {
+      const cur = server.find(x => x.key === c.key) || {};
+      const patch = {}, base = {};
+      for (const it of info.items) { patch[it.field] = it.yours; base[it.field] = cur[it.field] ?? (it.field === "cut" ? false : ""); }
+      delete conflicts[c.key]; saveConflicts();
+      queue({ action: "save", key: c.key, patch, base });
+    };
+    const theirs = el("button", "btn", "Keep theirs");
+    theirs.onclick = () => { delete conflicts[c.key]; saveConflicts(); render(); updateBar(); toast("Kept their version of " + c.key); };
+    const copy = el("button", "btn", "Copy mine");
+    copy.onclick = () => { const txt = info.items.map(it => `${LABEL[it.field] || it.field}: ${fmt(it.yours)}`).join("\n"); navigator.clipboard?.writeText(txt).then(() => toast("Copied your text"), () => toast("Couldn't copy: select the text instead")); };
+    row.append(mine, theirs, copy); box.append(row);
+    return box;
+  }
+  const fmt = v => v === true ? "cut" : v === false ? "not cut" : (String(v || "") || "(empty)");
+
+  function editorView(c) {
+    const d = drafts[c.key];
+    const f = el("form", "editor"); f.onsubmit = ev => { ev.preventDefault(); save(c.key); };
+    const cur = server.find(x => x.key === c.key) || c;
+    const moved = FKEYS.filter(k => (cur[k] || "") !== (d.base[k] || ""));
+    if (moved.length) f.append(el("div", "warn", `${cur.updatedBy || "Someone"} changed ${moved.map(k => LABEL[k]).join(", ")} since you opened this cue. If you also changed those, you'll be asked which to keep when you save.`));
+    for (const [k, l] of FIELDS) {
+      const lab = el("label", SPEAKERS.includes(k) || k === "notes" ? "wide" : null, l);
+      const ta = el("textarea"); ta.id = `f-${c.key}-${k}`; ta.name = k; ta.value = d.draft[k] ?? ""; ta.rows = SPEAKERS.includes(k) ? 3 : 2;
+      ta.oninput = () => { d.draft[k] = ta.value; saveDrafts(); updateBar(); };
+      lab.append(ta); f.append(lab);
+    }
+    if (c.director) f.append(el("div", "ro wide", "Gary's director note (edited in the project): " + c.director));
+    const row = el("div", "row");
+    const s = el("button", "btn primary", "Save"); s.type = "submit";
+    const x = el("button", "btn", "Discard changes"); x.type = "button"; x.onclick = () => { delete drafts[c.key]; saveDrafts(); editingKey = null; render(); updateBar(); };
+    const cut = el("button", "btn danger", c.cut ? "Restore cue" : "Mark as cut"); cut.type = "button"; cut.onclick = () => toggleCut(c);
+    row.append(s, x, cut, el("span", "ro", "Cut cues stay in the list, struck through. Nothing is ever deleted."));
+    f.append(row);
+    setTimeout(() => { const t = f.querySelector("textarea"); if (t && !f.contains(document.activeElement)) t.focus({ preventScroll: true }); }, 0);
+    return f;
+  }
+
+  function renderCues() {
+    const box = $("cues");
+    const keepFocus = document.activeElement && box.contains(document.activeElement) && document.activeElement.id;
+    const sel = keepFocus && [document.activeElement.selectionStart, document.activeElement.selectionEnd];
+    box.textContent = "";
+    const s = segments[current];
+    if (!s) { box.append(el("div", "empty-state", server.length ? "No segments." : "The shared cue list is empty. Gary loads it once: Backup, then Choose a backup file, then the seed file from the project.")); return; }
+    const shown = s.cues.filter(c => matches(c) || c.key === editingKey || conflicts[c.key]);
+    if (!shown.length) box.append(el("div", "empty-state", "No cues in this segment match the filter. Choose Everything, or pick another segment on the left."));
+    for (const c of shown) box.append(cueView(c));
+    if (s.cues.length) { const add = el("button", "btn", "+ Add a cue at the end of this segment"); add.style.alignSelf = "flex-start"; add.onclick = () => addAfter(s.cues[s.cues.length - 1]); box.append(add); }
+    if (keepFocus) { const n = $(keepFocus); if (n) { n.focus({ preventScroll: true }); try { n.setSelectionRange(sel[0], sel[1]); } catch {} } }
+  }
+
+  function renderLog() {
+    const ol = $("logList"); ol.textContent = "";
+    if (!log.length) { ol.append(el("li", null, "No changes yet.")); return; }
+    for (const e of log) {
+      if (e.field === "_seed") continue;
+      const li = el("li");
+      const what = e.field === "_new" ? "added a cue" : e.field === "cut" ? (String(e.after) === "true" ? "marked a cue as cut" : "restored a cut cue") : `changed ${LABEL[e.field] || e.field}`;
+      const head = el("div"); head.append(el("b", null, e.who || "Someone"), document.createTextNode(` ${what} in ${e.key}`)); li.append(head);
+      if (e.field !== "_new" && e.field !== "cut") li.append(el("div", "ro", `“${trim(e.before) || "(empty)"}” → “${trim(e.after) || "(empty)"}”`));
+      li.append(el("div", "when", ago(e.at)));
+      const j = el("button", "lnk", "Show"); j.onclick = () => jumpTo(e.key); li.append(j);
+      ol.append(li);
+    }
+  }
+  const trim = s => { s = String(s ?? ""); return s.length > 90 ? s.slice(0, 88) + "…" : s; };
+
+  function render() { renderRail(); renderHero(); renderCues(); }
+  function go(i) { if (i < 0 || i >= segments.length) return; current = i; ls.set("seg", i); render(); $("main").scrollTop = 0; }
+  function jumpTo(key) {
+    const i = segments.findIndex(s => s.cues.some(c => c.key === key)); if (i < 0) return;
+    filter = "all"; query = ""; $("q").value = ""; syncChips(); go(i);
+    const n = $("cue-" + key); if (n) n.scrollIntoView({ block: "center" });
+  }
+
+  // ------------------------------------------------------------ editing
+  function startEdit(c) {
+    if (editingKey && editingKey !== c.key && drafts[editingKey]) {
+      const d = drafts[editingKey];
+      if (FKEYS.some(f => (d.draft[f] || "") !== (d.base[f] || ""))) { toast(`Save or discard ${editingKey} first`); jumpTo(editingKey); return; }
+      delete drafts[editingKey];
+    }
+    if (!drafts[c.key]) {
+      const src = cues.find(x => x.key === c.key) || c;
+      const base = Object.fromEntries(FKEYS.map(k => [k, src[k] || ""]));
+      drafts[c.key] = { base, draft: Object.assign({}, base) };
+      saveDrafts();
+    }
+    editingKey = c.key; renderCues(); updateBar();
+    const n = $("cue-" + c.key); if (n) n.scrollIntoView({ block: "nearest" });
+  }
+
+  function save(key) {
+    const d = drafts[key]; if (!d) return;
+    const patch = {}, base = {};
+    for (const k of FKEYS) { const v = (d.draft[k] || "").replace(/\s+$/, ""); if (v !== (d.base[k] || "")) { patch[k] = v; base[k] = d.base[k] || ""; } }
+    delete drafts[key]; saveDrafts(); editingKey = null;
+    if (!Object.keys(patch).length) { render(); updateBar(); return; }
+    queue({ action: "save", key, patch, base });
+    toast(`Saving ${key}…`);
+  }
+
+  function toggleCut(c) {
+    const cur = cues.find(x => x.key === c.key) || c;
+    delete drafts[c.key]; saveDrafts(); editingKey = null;
+    queue({ action: "save", key: c.key, patch: { cut: !cur.cut }, base: { cut: !!cur.cut } });
+  }
+
+  function addAfter(c) {
+    const key = "W" + Date.now().toString(36).toUpperCase().slice(-7);
+    queue({ action: "add", key, after: c.key, fields: {} });
+    startEdit(cues.find(x => x.key === key));
+  }
+
+  // ------------------------------------------------------------ backups
+  function download(name, text, type) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+    document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
+  $("dlJson").onclick = () => download(`PussCueBook_${stamp()}.json`, JSON.stringify({ app: "puss-cue-book", saved: new Date().toISOString(), cues: view().map(strip) }, null, 1), "application/json");
+  $("dlCsv").onclick = () => {
+    const q = v => { v = String(v ?? ""); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    const lines = [CSV_COLS.map(c => q(c[1])).join(",")].concat(view().map(c => CSV_COLS.map(([k]) => q(k === "cut" ? (c.cut ? "yes" : "") : c[k])).join(",")));
+    download(`PussCueBook_${stamp()}.csv`, "﻿" + lines.join("\r\n"), "text/csv");
+  };
+  const strip = c => { const o = Object.assign({}, c); delete o._pending; return o; };
+  $("upFile").onchange = async ev => {
+    const file = ev.target.files[0]; ev.target.value = ""; if (!file) return;
+    const out = $("upResult");
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { out.textContent = "That file isn't a Cue Book backup (it isn't JSON)."; return; }
+    if (!data || data.app !== "puss-cue-book" || !Array.isArray(data.cues)) { out.textContent = "That file isn't a Cue Book backup."; return; }
+    if (!server.length) {                              // first load: the shared list is empty
+      out.textContent = "";
+      out.append(el("div", null, `The shared cue list is empty. Load the ${data.cues.length} cues from this file?`));
+      const row = el("div", "rowb");
+      const load = el("button", "btn primary", `Load ${data.cues.length} cues`);
+      load.onclick = async () => {
+        load.disabled = true;
+        try {
+          const res = await call({ action: "seed", cues: data.cues, op: uid() });
+          out.textContent = res.ok ? `Loaded ${res.seeded} cues.` : (res.message || "The server refused.");
+          await refresh();
+        } catch { out.textContent = "Can't reach the cue list. Nothing was loaded; try again."; load.disabled = false; }
+      };
+      row.append(load); out.append(row); return;
+    }
+    const now = new Map(view().map(c => [c.key, c]));
+    const ops = [], lines = [];
+    let missing = 0, prevKey = null;
+    for (const b of data.cues.slice().sort((x, y) => x.ord - y.ord)) {
+      const c = now.get(b.key);
+      if (!c) {
+        if (/^W/.test(b.key) && FKEYS.some(k => b[k])) {
+          const after = prevKey && (now.has(prevKey) || ops.some(o => o.key === prevKey)) ? prevKey : (b.after || "");
+          ops.push({ action: "add", key: b.key, after, fields: Object.fromEntries(FKEYS.map(k => [k, b[k] || ""])) });
+          lines.push(`${b.key}: add back (a cue added on the page that is no longer in the list)`);
+        } else missing++;
+        prevKey = b.key; continue;
+      }
+      const patch = {}, base = {};
+      for (const k of FKEYS) if ((b[k] || "") !== (c[k] || "")) { patch[k] = b[k] || ""; base[k] = c[k] || ""; }
+      if (!!b.cut !== !!c.cut) { patch.cut = !!b.cut; base.cut = !!c.cut; }
+      if (Object.keys(patch).length) {
+        ops.push({ action: "save", key: b.key, patch, base });
+        lines.push(`${b.key}: ${Object.keys(patch).map(k => k === "cut" ? (patch.cut ? "mark as cut" : "restore from cut") : LABEL[k]).join(", ")}` + (c.updatedBy ? ` (last changed by ${c.updatedBy}, ${ago(c.updatedAt)})` : ""));
+      }
+      prevKey = b.key;
+    }
+    out.textContent = "";
+    const when = data.saved ? new Date(data.saved).toLocaleString() : "an unknown time";
+    if (!ops.length) { out.textContent = `The backup from ${when} matches the current list. Nothing to restore.`; return; }
+    out.append(el("div", null, `The backup from ${when} differs in ${ops.length} cue${ops.length === 1 ? "" : "s"}` + (missing ? ` (${missing} cue${missing === 1 ? "" : "s"} in the backup no longer exist and are skipped)` : "") + ". Restoring replaces the current text in:"));
+    const ul = el("ul"); lines.slice(0, 40).forEach(l => ul.append(el("li", null, l))); if (lines.length > 40) ul.append(el("li", null, `…and ${lines.length - 40} more`)); out.append(ul);
+    const row = el("div", "rowb");
+    const go_ = el("button", "btn primary", `Restore ${ops.length} cue${ops.length === 1 ? "" : "s"}`);
+    go_.onclick = () => { ops.forEach(o => queue(o)); out.textContent = `Restoring ${ops.length} cue${ops.length === 1 ? "" : "s"}. Watch the bar above until it says All changes saved.`; };
+    const no = el("button", "btn", "Cancel"); no.onclick = () => { out.textContent = "Nothing was changed."; };
+    row.append(go_, no); out.append(row);
+  };
+
+  // ------------------------------------------------------------ chrome
+  let toastT;
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
+  function syncChips() { document.querySelectorAll(".fchip").forEach(b => b.setAttribute("aria-pressed", b.dataset.f === filter ? "true" : "false")); }
+  document.querySelectorAll(".fchip").forEach(b => b.onclick = () => { filter = b.dataset.f; ls.set("filter", filter); syncChips(); render(); });
+  syncChips();
+  $("q").oninput = e => { query = e.target.value.trim().toLowerCase(); render(); };
+  function togglePanel(id, btn, onOpen) {
+    const p = $(id); const open = p.hidden;
+    ["log", "bak"].forEach(x => $(x).hidden = true); ["logBtn", "bakBtn"].forEach(x => $(x).setAttribute("aria-expanded", "false"));
+    p.hidden = !open; $(btn).setAttribute("aria-expanded", String(open)); if (open && onOpen) onOpen();
+  }
+  $("logBtn").onclick = () => togglePanel("log", "logBtn", async () => {
+    $("logList").textContent = "Loading…";
+    try { const r = await call({ action: "log", limit: 60 }); if (r.ok) { log = r.log; renderLog(); } else $("logList").textContent = r.message || "Couldn't load changes."; }
+    catch { $("logList").textContent = "Can't reach the cue list right now."; }
+  });
+  $("bakBtn").onclick = () => togglePanel("bak", "bakBtn");
+  $("retryBtn").onclick = () => { backoff = 2000; clearTimeout(retryTimer); flush(); };
+  document.addEventListener("keydown", e => {
+    if (e.target.closest("input, textarea, select")) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && editingKey) { e.preventDefault(); save(editingKey); }
+      return;
+    }
+    if (e.key === "ArrowRight" || e.key === "j") go(current + 1);
+    if (e.key === "ArrowLeft" || e.key === "k") go(current - 1);
+  });
+  window.addEventListener("beforeunload", e => {
+    const openDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    if (outbox.length || openDirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+  window.addEventListener("online", () => { backoff = 2000; flush(); refresh(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { flush(); refresh(); } });
+  setInterval(() => { if (!document.hidden && !flushing) { flush(); if (!outbox.length) refresh(); } }, POLL_MS);
+  setInterval(updateBar, 15000);
+
+  // ------------------------------------------------------------ sign-in gate
+  function showGate(err) {
+    $("gate").hidden = false;
+    if (who) { const known = [...$("gName").options].some(o => o.value === who); $("gName").value = known ? who : "_other"; $("gOtherWrap").hidden = known; if (!known) $("gOther").value = who; }
+    $("gErr").hidden = !err; $("gErr").textContent = err || "";
+  }
+  $("gName").onchange = () => { $("gOtherWrap").hidden = $("gName").value !== "_other"; };
+  $("gateForm").onsubmit = async ev => {
+    ev.preventDefault();
+    const name = $("gName").value === "_other" ? $("gOther").value.trim() : $("gName").value;
+    if (!name) { $("gErr").hidden = false; $("gErr").textContent = "Choose your name."; return; }
+    who = name; pass = $("gPass").value; $("gGo").disabled = true; $("gErr").hidden = true;
+    try {
+      const res = await call({ action: "list" });
+      if (!res.ok) { $("gErr").hidden = false; $("gErr").textContent = res.code === "wrong_passcode" ? "That passcode didn't work." : (res.message || "The server refused."); pass = ""; return; }
+      ls.set("who", who); ls.set("pass", pass);
+      server = res.cues; lastSync = Date.now(); $("gate").hidden = true;
+      buildSegments(); render(); updateBar(); flush();
+    } catch (e) { $("gErr").hidden = false; $("gErr").textContent = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection and try again."; }
+    finally { $("gGo").disabled = false; }
+  };
+
+  // ------------------------------------------------------------ start
+  if (drafts && Object.keys(drafts).length) editingKey = Object.keys(drafts)[0];
+  buildSegments(); render(); updateBar();
+  if (!who || !pass) showGate(); else { refresh().then(flush); }
+  if (outbox.length) toast(`${outbox.length} unsent change${outbox.length > 1 ? "s" : ""} from last time: sending now.`);
+  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, refresh, flush };
+})();
+</script>
+</body>
+</html>
