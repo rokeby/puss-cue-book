@@ -570,7 +570,13 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         const i = segments.findIndex(s => s.cues.some(c => c.key === editingKey));
         if (i >= 0) current = i;
       }
-      if (!document.querySelector(".nameform")) render();   // don't wipe a name someone is typing
+      // Don't redraw under someone typing: a name box, or an open cue editor (redrawing rebuilt the editor and
+      // the cursor jumped to its first box every 20 s, Gary 9 Oct). The data is current; the view catches up on
+      // save/close, and a clash is still caught at save time.
+      const act = document.activeElement;
+      const typing = document.querySelector(".nameform") || (editingKey && document.querySelector("#cues form"))
+        || (act && act.closest && act.closest("main") && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName));
+      if (!typing) render();
       updateBar();
     } catch (e) { lastError = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection."; updateBar(); }
   }
