@@ -55,6 +55,7 @@ header.top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: c
 .links a { font-size: 13px; color: var(--accent); font-weight: 500; text-decoration: none; border: 1px solid var(--rule); border-radius: 8px; padding: 5px 11px }
 .links a:hover { border-color: var(--accent) }
 .tbtn { border: 1px solid var(--rule); background: transparent; border-radius: 8px; padding: 5px 11px; font-size: 13px }
+.tbtn[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
 
 .savebar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 20px; font-size: 13px; border-bottom: 1px solid var(--rule); background: var(--paper) }
 .savebar .state { display: flex; align-items: center; gap: 7px; font-weight: 500 }
@@ -119,6 +120,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .note b { color: var(--ink); font-weight: 600 }
 .meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted) }
 .meta .acts { display: flex; gap: 6px }
+.movebtn { min-width: 28px; border: 1px solid var(--rule); background: transparent; border-radius: 6px; padding: 1px 6px; color: var(--accent); font-weight: 700 }
+.movebtn:disabled { opacity: .35; cursor: default }
 .pill { font: 600 11px var(--body); letter-spacing: .04em; border-radius: 999px; padding: 1px 8px; background: var(--standby); color: var(--sheet) }
 .pill.bad { background: var(--cut) }
 .lnk { border: 0; background: transparent; color: var(--accent); padding: 2px 4px; font-size: 13px; font-weight: 500 }
@@ -128,6 +131,22 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .cue-own-still { display: block; width: min(240px, 100%); aspect-ratio: 16/9; object-fit: cover; border-radius: 7px; background: #0b0d0c; box-shadow: var(--shadow) }
 .surtitle .num strong { font-size: 14px }
 .clear-screen { color: var(--muted); font-style: italic }
+
+.app.running { grid-template-columns: minmax(0, 1fr) }
+.app.running main { grid-column: 1 / -1; padding-inline: 16px }
+.running-order { display: flex; flex-direction: column; gap: 18px; max-width: 920px; margin: 18px auto 0 }
+.run-segment { display: flex; flex-direction: column; gap: 5px }
+.run-segment h2 { margin: 0 0 2px; font: 800 20px/1.1 var(--display); position: sticky; top: 0; z-index: 1; padding: 7px 0; background: var(--paper) }
+.run-cue { width: 100%; display: grid; grid-template-columns: minmax(86px, .7fr) minmax(120px, 2fr) minmax(70px, 1fr) auto; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 7px 9px }
+.run-cue.cut { opacity: .55; text-decoration: line-through }
+.run-id { font: 500 11px/1.25 var(--mono); color: var(--muted) }
+.run-id b { display: block; color: var(--ink); font-size: 13px }
+.run-speaker { min-width: 0; overflow-wrap: anywhere }
+.run-speaker b { color: var(--muted); font: 600 10px var(--body); letter-spacing: .06em; text-transform: uppercase; margin-right: 5px }
+.run-depts, .run-marks { display: flex; flex-wrap: wrap; gap: 4px }
+.run-depts span, .run-marks span { border-radius: 5px; padding: 2px 5px; font: 600 10px var(--body); letter-spacing: .04em }
+.run-depts span { background: var(--chip-action); color: var(--chip-action-ink) }
+.run-marks span { border: 1px solid var(--standby); color: var(--standby) }
 
 .editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px }
 .editor label { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); min-width: 0 }
@@ -178,6 +197,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   .num { padding: 10px 6px }
   .line { grid-template-columns: minmax(0, 1fr); gap: 0 }
   .editor, .conf .pair { grid-template-columns: minmax(0, 1fr) }
+  .run-cue { grid-template-columns: minmax(66px, .65fr) minmax(0, 2fr); gap: 4px 7px }
+  .run-depts, .run-marks { grid-column: 2 }
 }
 </style>
 </head>
@@ -214,6 +235,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     </div>
     <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
     <span id="links" class="links"></span>
+    <button id="runBtn" class="tbtn" aria-pressed="false">Running order</button>
     <button id="logBtn" class="tbtn" aria-expanded="false">Changes</button>
     <button id="bakBtn" class="tbtn" aria-expanded="false">Backup</button>
   </header>
@@ -352,13 +374,14 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   let who = ls.get("who", ""), pass = ls.get("pass", "");
   const client = ls.get("client", null) || (() => { const c = uid().slice(0, 12); ls.set("client", c); return c; })();
   let server = [];                 // cues as the server last told us
-  let serverLines = [], surtitlesSupported = null;
+  let serverLines = [], surtitlesSupported = null, moveSupported = false;
   let outbox = ls.get("outbox", []);   // writes not yet acknowledged; survives reloads and closed tabs
   let conflicts = ls.get("conflicts", {});  // key -> {op, items:[{field, theirs, yours, base}]}
   let drafts = ls.get("drafts", {});        // key -> {base, draft} while a cue is open
   let lineDrafts = ls.get("lineDrafts", {});
   let segments = [], current = ls.get("seg", 0), filter = ls.get("filter", "all"), query = "";
   let editingKey = null, editingLineKey = null, showSurtitles = ls.get("showSurtitles", false);
+  let runningOrder = ls.get("runningOrder", false);
   let lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
   let log = [];
 
@@ -392,6 +415,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       if (!res.ok) return handleRefused(res);
       server = res.cues; lastSync = Date.now(); lastError = "";
       surtitlesSupported = Array.isArray(res.surtitles);
+      moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
       serverLines = surtitlesSupported ? res.surtitles : [];
       renderLinks(res.links);
       buildSegments();
@@ -464,6 +488,15 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         const after = map.get(op.after);
         const c = { key: op.key, ord: (after ? after.ord : 0) + 0.001, origin: "web", num: "", cut: false, director: "", _pending: true };
         FKEYS.forEach(f => c[f] = (op.fields || {})[f] || ""); map.set(op.key, c);
+      }
+      if (op.action === "move" && map.has(op.key)) {
+        const ordered = [...map.values()].sort((a, b) => a.ord - b.ord).filter(c => c.key !== op.key);
+        let at = 0;
+        if (op.after) { const found = ordered.findIndex(c => c.key === op.after); at = found < 0 ? ordered.length : found + 1; }
+        const before = at > 0 ? ordered[at - 1] : null, after = at < ordered.length ? ordered[at] : null;
+        const cue = map.get(op.key);
+        cue.ord = before && after ? (before.ord + after.ord) / 2 : before ? before.ord + 10 : after ? after.ord - 10 : 10;
+        cue._pending = true;
       }
     }
     return [...map.values()].sort((a, b) => a.ord - b.ord);
@@ -683,6 +716,20 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     left.append(document.createTextNode(c.updatedAt ? `Changed ${ago(c.updatedAt)} by ${c.updatedBy || "someone"}` : (c.origin === "web" ? "" : "From the shared Sheet")));
     meta.append(left);
     const acts = el("div", "acts");
+    if (moveSupported) {
+      const ordered = view(), at = ordered.findIndex(cue => cue.key === c.key);
+      const up = el("button", "movebtn", "\u2191"), down = el("button", "movebtn", "\u2193");
+      up.type = down.type = "button";
+      up.setAttribute("aria-label", `Move ${c.key} up one cue`); up.title = "Move up one cue";
+      down.setAttribute("aria-label", `Move ${c.key} down one cue`); down.title = "Move down one cue";
+      up.disabled = c._pending || at <= 0; down.disabled = c._pending || at < 0 || at >= ordered.length - 1;
+      up.onclick = ev => { ev.stopPropagation(); moveStep(c.key, -1); };
+      down.onclick = ev => { ev.stopPropagation(); moveStep(c.key, 1); };
+      acts.append(up, down);
+      const moveAfter = el("button", "lnk", "Move after\u2026");
+      moveAfter.onclick = ev => { ev.stopPropagation(); moveAfterForm(body, c); };
+      acts.append(moveAfter);
+    }
     const e = el("button", "lnk", drafts[c.key] ? "Continue editing" : "Edit"); e.onclick = ev => { ev.stopPropagation(); startEdit(c); };
     const a = el("button", "lnk", "Add cue after"); a.onclick = ev => { ev.stopPropagation(); addAfter(c); };
     acts.append(e, a);
@@ -698,7 +745,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     }
     meta.append(acts); body.append(meta);
     card.style.cursor = "pointer";
-    card.onclick = ev => { if (ev.target.closest("button, .conf") || String(getSelection())) return; startEdit(c); };
+    card.onclick = ev => { if (ev.target.closest("button, .conf, .move-after-form") || String(getSelection())) return; startEdit(c); };
     return card;
   }
 
@@ -721,6 +768,11 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const row = el("div", "rowb");
     const mine = el("button", "btn primary", "Keep mine");
     mine.onclick = () => {
+      if (info.op.action === "move") {
+        delete conflicts[c.key]; saveConflicts();
+        queueMove(c.key, info.op.after);
+        return;
+      }
       const cur = server.find(x => x.key === c.key) || {};
       const patch = {}, base = {};
       for (const it of info.items) { patch[it.field] = it.yours; base[it.field] = cur[it.field] ?? (it.field === "cut" ? false : ""); }
@@ -900,6 +952,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const keepFocus = document.activeElement && box.contains(document.activeElement) && document.activeElement.id;
     const sel = keepFocus && [document.activeElement.selectionStart, document.activeElement.selectionEnd];
     box.textContent = "";
+    if (runningOrder) { renderRunningOrder(box); return; }
     const s = segments[current];
     if (!s) { box.append(el("div", "empty-state", server.length ? "No segments." : "The shared cue list is empty. Gary loads it once: Backup, then Choose a backup file, then the seed file from the project.")); return; }
     if (showSurtitles) { renderSurtitles(box); return; }
@@ -927,7 +980,40 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
   const trim = s => { s = String(s ?? ""); return s.length > 90 ? s.slice(0, 88) + "…" : s; };
 
-  function render() { renderRail(); renderHero(); renderCues(); }
+  function renderRunningOrder(box) {
+    const all = el("div", "running-order");
+    for (const segment of segments) {
+      const group = el("section", "run-segment");
+      group.append(el("h2", null, segment.title));
+      for (const cue of segment.cues) {
+        const row = el("button", "run-cue" + (cue.cut ? " cut" : "")); row.type = "button"; row.dataset.key = cue.key;
+        const id = el("span", "run-id"); id.append(el("b", null, cue.num || "\u00b7"), document.createTextNode(cue.key));
+        const speakerKeys = SPEAKERS.filter(key => cue[key]);
+        const speech = el("span", "run-speaker");
+        if (speakerKeys.length) speech.append(el("b", null, speakerKeys.join(", ")), document.createTextNode(shortText(speakerKeys.map(key => cue[key]).join(" / "), 60)));
+        else speech.append(document.createTextNode("No spoken line"));
+        const departments = el("span", "run-depts");
+        const abbreviations = { light: "LX", soundTech: "ST", soundCue: "SND", action: "ACT", videoCue: "VID", beats: "BEAT" };
+        for (const key of DEPTS) if (cue[key]) { const chip = el("span", null, abbreviations[key]); chip.title = `${DEPT_SHORT[key]}: ${cue[key]}`; departments.append(chip); }
+        const marks = el("span", "run-marks");
+        if (cue.pause === "yes") marks.append(el("span", null, "PAUSE POSSIBLE"));
+        if (cue.go) marks.append(el("span", null, "GO " + cue.go));
+        row.append(id, speech, departments, marks);
+        row.onclick = () => { runningOrder = false; ls.set("runningOrder", false); syncRunningOrder(); render(); jumpTo(cue.key); };
+        group.append(row);
+      }
+      all.append(group);
+    }
+    box.append(all);
+  }
+  const shortText = (value, limit) => { const text = String(value || "").replace(/\s+/g, " ").trim(); return text.length > limit ? text.slice(0, limit - 1) + "\u2026" : text; };
+
+  function syncRunningOrder() {
+    document.querySelector(".app").classList.toggle("running", runningOrder);
+    $("runBtn").setAttribute("aria-pressed", String(runningOrder));
+    $("rail").hidden = runningOrder; $("hero").hidden = runningOrder;
+  }
+  function render() { syncRunningOrder(); renderRail(); renderHero(); renderCues(); }
   function go(i) { if (i < 0 || i >= segments.length) return; current = i; ls.set("seg", i); render(); $("main").scrollTop = 0; }
   function jumpTo(key) {
     const i = segments.findIndex(s => s.cues.some(c => c.key === key)); if (i < 0) return;
@@ -974,6 +1060,31 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const key = "W" + Date.now().toString(36).toUpperCase().slice(-7);
     queue({ action: "add", key, after: c.key, fields: {} });
     startEdit(cues.find(x => x.key === key));
+  }
+
+  function moveBase(ordered, at) {
+    return { ord: ordered[at].ord, before: at > 0 ? ordered[at - 1].key : "", after: at + 1 < ordered.length ? ordered[at + 1].key : "" };
+  }
+  function queueMove(key, after) {
+    const ordered = view(), at = ordered.findIndex(cue => cue.key === key); if (at < 0) return;
+    const from = segments.find(segment => segment.cues.some(cue => cue.key === key));
+    queue({ action: "move", key, after, base: moveBase(ordered, at) });
+    const to = segments.find(segment => segment.cues.some(cue => cue.key === key));
+    toast(from && to && from.title !== to.title ? `${key} will land in ${to.title}.` : `Moving ${key}\u2026`);
+  }
+  function moveStep(key, direction) {
+    const ordered = view(), at = ordered.findIndex(cue => cue.key === key), next = at + direction;
+    if (at < 0 || next < 0 || next >= ordered.length) return;
+    queueMove(key, direction < 0 ? (at >= 2 ? ordered[at - 2].key : "") : ordered[at + 1].key);
+  }
+  function moveAfterForm(host, cue) {
+    const existing = host.querySelector(".move-after-form"); if (existing) { existing.remove(); return; }
+    const form = el("form", "nameform move-after-form"), label = el("label", null, `Move ${cue.key} after cue key (blank = start)`);
+    const input = el("input"); input.placeholder = "R0012"; input.autocomplete = "off";
+    const row = el("div", "rowb"), move = el("button", "btn primary", "Move"), cancel = el("button", "btn", "Cancel");
+    move.type = "submit"; cancel.type = "button"; cancel.onclick = () => form.remove(); row.append(move, cancel);
+    form.onsubmit = event => { event.preventDefault(); const after = input.value.trim(); if (after && !view().some(item => item.key === after)) { toast(`No cue ${after}`); input.focus(); return; } queueMove(cue.key, after); };
+    label.append(input); form.append(label, row); host.append(form); input.focus();
   }
 
   // ------------------------------------------------------------ backups
@@ -1136,6 +1247,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     catch { $("logList").textContent = "Can't reach the cue list right now."; }
   });
   $("bakBtn").onclick = () => togglePanel("bak", "bakBtn");
+  $("runBtn").onclick = () => { runningOrder = !runningOrder; ls.set("runningOrder", runningOrder); editingKey = null; editingLineKey = null; render(); $("main").scrollTop = 0; };
   $("retryBtn").onclick = () => { backoff = 2000; clearTimeout(retryTimer); flush(); };
   document.addEventListener("keydown", e => {
     if (e.target.closest("input, textarea, select")) {
@@ -1174,6 +1286,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       if (!res.ok) { $("gErr").hidden = false; $("gErr").textContent = res.code === "wrong_passcode" ? "That passcode didn't work." : (res.message || "The server refused."); pass = ""; return; }
       ls.set("who", who); ls.set("pass", pass);
       server = res.cues; surtitlesSupported = Array.isArray(res.surtitles); serverLines = surtitlesSupported ? res.surtitles : [];
+      moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
       lastSync = Date.now(); $("gate").hidden = true;
       renderLinks(res.links);
       buildSegments(); render(); updateBar(); flush();

@@ -50,6 +50,7 @@ function doPost(e) {
     lock.waitLock(25000);
     try {
       if (req.action === 'save') return json_(save_(req));
+      if (req.action === 'move') return json_(move_(req));
       if (req.action === 'add') return json_(add_(req));
       if (req.action === 'saveLine') return json_(saveLine_(req));
       if (req.action === 'addLine') return json_(addLine_(req));
@@ -69,7 +70,7 @@ function list_() {
   rows.sort(function (a, b) { return a.ord - b.ord; });
   var surtitles = readSurtitles_().rows;
   surtitles.sort(function (a, b) { return a.ord - b.ord; });
-  return { ok: true, cues: rows, surtitles: surtitles, links: readLinks_(), serverTime: Date.now() };
+  return { ok: true, cues: rows, surtitles: surtitles, links: readLinks_(), actions: ['move'], serverTime: Date.now() };
 }
 
 // Optional "links" tab (columns: label, url): links shown on the page only after sign-in, so private addresses
@@ -154,6 +155,54 @@ function add_(req) {
   sh.getRange(sh.getLastRow() + 1, 1, 1, CUE_COLUMNS.length).setValues([CUE_COLUMNS.map(function (c) { return cell_(cue[c]); })]);
   appendLog_([{ at: now, who: who, client: client, op: op, key: key, field: '_new', before: '', after: cue.after, version: 1 }]);
   return { ok: true, cue: cue };
+}
+
+function move_(req) {
+  var who = clean_(req.who, 60), client = clean_(req.client, 60), op = clean_(req.op, 80);
+  if (op && opSeen_(op)) return { ok: true, duplicate: true, cue: findCue_(req.key) };
+  var table = readCues_(), idx = table.index[req.key];
+  if (idx == null) return { ok: false, code: 'not_found', message: 'No cue ' + req.key };
+  var cur = table.rows[idx], sorted = table.rows.slice().sort(function (a, b) { return a.ord - b.ord; });
+  var oldAt = sorted.indexOf(cur), oldBefore = oldAt > 0 ? sorted[oldAt - 1].key : '';
+  var oldAfter = oldAt + 1 < sorted.length ? sorted[oldAt + 1].key : '';
+  var base = req.base || {}, expectedOrd = Number(base.ord);
+  if (!isFinite(expectedOrd) || cur.ord !== expectedOrd || oldBefore !== String(base.before || '') || oldAfter !== String(base.after || '')) {
+    return { ok: false, code: 'conflict', conflicts: [{ field: '_move',
+      theirs: movePlace_(oldBefore, oldAfter), yours: 'after ' + String(req.after || '(start)'),
+      base: movePlace_(String(base.before || ''), String(base.after || '')) }], cue: cur };
+  }
+  var afterKey = clean_(req.after, 40);
+  if (afterKey === cur.key) return { ok: false, code: 'bad_request', message: 'A cue cannot move after itself' };
+  var without = sorted.filter(function (cue) { return cue.key !== cur.key; });
+  var insertAt = 0;
+  if (afterKey) {
+    insertAt = without.findIndex(function (cue) { return cue.key === afterKey; });
+    if (insertAt < 0) return { ok: false, code: 'not_found', message: 'No cue ' + afterKey };
+    insertAt += 1;
+  }
+  var newBefore = insertAt > 0 ? without[insertAt - 1] : null;
+  var newAfter = insertAt < without.length ? without[insertAt] : null;
+  if ((newBefore ? newBefore.key : '') === oldBefore && (newAfter ? newAfter.key : '') === oldAfter) {
+    return { ok: true, unchanged: true, cue: cur };
+  }
+  var nextOrd = newBefore && newAfter ? (newBefore.ord + newAfter.ord) / 2
+    : newBefore ? newBefore.ord + 10 : newAfter ? newAfter.ord - 10 : 10;
+  if (!isFinite(nextOrd) || (newBefore && nextOrd === newBefore.ord) || (newAfter && nextOrd === newAfter.ord)) {
+    return { ok: false, code: 'order_space_exhausted', message: 'There is no numeric space between those cues; ask Gary to repair the order.' };
+  }
+  var now = Date.now(), beforePlace = movePlace_(oldBefore, oldAfter);
+  cur.ord = nextOrd;
+  cur.version = Number(cur.version || 0) + 1;
+  cur.updatedBy = who;
+  cur.updatedAt = now;
+  writeCue_(table.sheet, idx, cur);
+  appendLog_([{ at: now, who: who, client: client, op: op, key: cur.key, field: '_move',
+    before: beforePlace, after: movePlace_(newBefore ? newBefore.key : '', newAfter ? newAfter.key : ''), version: cur.version }]);
+  return { ok: true, cue: cur };
+}
+
+function movePlace_(before, after) {
+  return 'between ' + (before || '(start)') + ' and ' + (after || '(end)');
 }
 
 function saveLine_(req) {
