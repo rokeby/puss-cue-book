@@ -7,7 +7,7 @@
  *   - "log"   sheet: APPEND-ONLY, every change ever made (who, when, field, before, after). The cue list can be
  *                    rebuilt from it.
  *   - Google Sheets' own File > Version history.
- *   - a daily copy of the whole spreadsheet into the Drive folder "Puss Cue Book backups" (installBackups()).
+ *   - a copy of the whole spreadsheet every 6 hours, "Puss Cue Book backup <date>" in My Drive (installBackups()).
  *   - Gary's repo copy: Tools/CueSheet/cue_sync.py webpull pulls everything into git.
  *
  * Writes are safe to retry (each carries an op id; a repeat is acknowledged, not re-applied) and never silently
@@ -149,7 +149,7 @@ function seed_(req, props) {
 }
 
 // ------------------------------------------------------------------ backups
-/** Run once from the editor: makes a daily copy of the spreadsheet into Drive "Puss Cue Book backups". */
+/** Run once from the editor: copies the spreadsheet every 6 hours ("Puss Cue Book backup <date>" in My Drive). */
 function installBackups() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'dailyBackup') ScriptApp.deleteTrigger(t);
@@ -158,13 +158,12 @@ function installBackups() {
   dailyBackup();
 }
 
+// Uses only the Sheets permission (no Drive access, which Google blocks for unverified scripts on some accounts):
+// each copy lands in My Drive as "Puss Cue Book backup <date>".
 function dailyBackup() {
-  var name = 'Puss Cue Book backups';
-  var folders = DriveApp.getFoldersByName(name);
-  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var stamp = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd_HHmm');
-  DriveApp.getFileById(ss.getId()).makeCopy('PussCueBook_' + stamp, folder);
+  var stamp = Utilities.formatDate(new Date(), 'Europe/London', 'yyyy-MM-dd HHmm');
+  ss.copy('Puss Cue Book backup ' + stamp);
 }
 
 // ------------------------------------------------------------------ sheet helpers
