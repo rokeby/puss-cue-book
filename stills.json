@@ -1,0 +1,99 @@
+{
+  "cues": {},
+  "published": "2026-10-09T15:58:15.004946+00:00",
+  "run_id": "CBSTILLS-20261009-155551",
+  "schema_version": 1,
+  "segments": {
+    "I1": {
+      "captured": "2026-10-09T15:56:19.375750+00:00",
+      "file": "stills/I1.jpg",
+      "master_frame": 10634784,
+      "unreal_id": "I1"
+    },
+    "I2": {
+      "captured": "2026-10-09T15:56:47.411214+00:00",
+      "file": "stills/I2.jpg",
+      "master_frame": 17491200,
+      "unreal_id": "I2"
+    },
+    "I3": {
+      "captured": "2026-10-09T15:57:08.722318+00:00",
+      "file": "stills/I3.jpg",
+      "master_frame": 26651904,
+      "unreal_id": "I3"
+    },
+    "I4": {
+      "captured": "2026-10-09T15:57:36.174430+00:00",
+      "file": "stills/I4.jpg",
+      "master_frame": 34540896,
+      "unreal_id": "I4"
+    },
+    "Opening": {
+      "captured": "2026-10-09T15:55:59.300191+00:00",
+      "file": "stills/Opening.jpg",
+      "master_frame": 1156320,
+      "unreal_id": "Opening"
+    },
+    "P01": {
+      "captured": "2026-10-09T15:56:06.006742+00:00",
+      "file": "stills/P01.jpg",
+      "master_frame": 3194880,
+      "unreal_id": "P01"
+    },
+    "P02": {
+      "captured": "2026-10-09T15:56:25.985456+00:00",
+      "file": "stills/P02.jpg",
+      "master_frame": 12648000,
+      "unreal_id": "P02"
+    },
+    "P03": {
+      "captured": "2026-10-09T15:56:54.036794+00:00",
+      "file": "stills/P03.jpg",
+      "master_frame": 19284480,
+      "unreal_id": "P03"
+    },
+    "P04": {
+      "captured": "2026-10-09T15:57:20.657779+00:00",
+      "file": "stills/P04.jpg",
+      "master_frame": 28736640,
+      "unreal_id": "P04"
+    },
+    "P05": {
+      "captured": "2026-10-09T15:57:50.310295+00:00",
+      "file": "stills/P05.jpg",
+      "master_frame": 38011724,
+      "unreal_id": "P05"
+    },
+    "S1": {
+      "captured": "2026-10-09T15:56:12.768868+00:00",
+      "file": "stills/S1.jpg",
+      "master_frame": 7041600,
+      "unreal_id": "S1"
+    },
+    "S2": {
+      "captured": "2026-10-09T15:56:41.329004+00:00",
+      "file": "stills/S2.jpg",
+      "master_frame": 15061920,
+      "unreal_id": "S2"
+    },
+    "S3": {
+      "captured": "2026-10-09T15:57:02.002272+00:00",
+      "file": "stills/S3.jpg",
+      "master_frame": 22887360,
+      "unreal_id": "S3"
+    },
+    "S4": {
+      "captured": "2026-10-09T15:57:29.608824+00:00",
+      "file": "stills/S4.jpg",
+      "master_frame": 31664640,
+      "unreal_id": "S4"
+    },
+    "S5": {
+      "captured": "2026-10-09T15:57:58.035110+00:00",
+      "file": "stills/S5.jpg",
+      "master_frame": 40836087,
+      "unreal_id": "S5"
+    }
+  },
+  "skipped": []
+}
