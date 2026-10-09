@@ -148,6 +148,38 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .run-depts span { background: var(--chip-action); color: var(--chip-action-ink) }
 .run-marks span { border: 1px solid var(--standby); color: var(--standby) }
 
+.print-view { max-width: 210mm; margin: 0 auto; padding: 14px; background: #fff; color: #000; font: 10pt/1.3 Arial, sans-serif }
+.print-view h1 { margin: 0 0 10px; font-size: 18pt }
+.print-list { column-gap: 7mm }
+.print-list.columns-2 { column-count: 2 }
+.print-segment { break-inside: auto }
+.print-segment h2 { break-after: avoid; margin: 12px 0 4px; border-bottom: 1px solid #000; font-size: 12pt }
+.print-cue { break-inside: avoid; border-bottom: 1px solid #aaa; padding: 4px 0 }
+.print-cue.cut { opacity: .6; text-decoration: line-through }
+.print-cue.context { color: #444; font-style: italic }
+.print-id { font-weight: 700; margin-right: 7px }
+.print-field { display: block }
+.print-field b { font-size: 8pt; text-transform: uppercase }
+.print-footer { border-top: 1px solid #777; margin-top: 12px; padding-top: 3px; font-size: 8pt }
+.print-actions { display: flex; gap: 8px; margin-bottom: 10px }
+.print-previewing .app, .print-previewing > .gate, .print-previewing > .panel, .print-previewing > .toast { display: none !important }
+.print-form { display: grid; grid-template-columns: 1fr 1fr; gap: 9px }
+.print-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px }
+.print-form .wide { grid-column: 1 / -1 }
+.print-form select { border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px }
+
+@page { size: A4 portrait; margin: 11mm 10mm 14mm }
+@media print {
+  :root { color-scheme: light }
+  body { background: #fff !important; color: #000 !important; font-size: 9pt }
+  body > :not(#printView) { display: none !important }
+  #printView { display: block !important; max-width: none; margin: 0; padding: 0; color: #000; background: #fff; font-size: 9pt }
+  .print-actions { display: none !important }
+  .print-list.columns-2 { column-count: 2 }
+  .print-footer { position: fixed; left: 0; right: 0; bottom: -9mm; margin: 0 }
+  .print-footer .page::after { content: counter(page) }
+}
+
 .editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px }
 .editor label { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); min-width: 0 }
 .editor label.wide { grid-column: 1 / -1 }
@@ -199,6 +231,9 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   .editor, .conf .pair { grid-template-columns: minmax(0, 1fr) }
   .run-cue { grid-template-columns: minmax(66px, .65fr) minmax(0, 2fr); gap: 4px 7px }
   .run-depts, .run-marks { grid-column: 2 }
+  .print-list.columns-2 { column-count: 1 }
+  .print-form { grid-template-columns: minmax(0, 1fr) }
+  .print-form .wide { grid-column: 1 }
 }
 </style>
 </head>
@@ -236,6 +271,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
     <span id="links" class="links"></span>
     <button id="runBtn" class="tbtn" aria-pressed="false">Running order</button>
+    <button id="printBtn" class="tbtn" aria-expanded="false">Print…</button>
     <button id="logBtn" class="tbtn" aria-expanded="false">Changes</button>
     <button id="bakBtn" class="tbtn" aria-expanded="false">Backup</button>
   </header>
@@ -266,6 +302,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   <label class="btn" for="upFile" style="align-self:flex-start">Choose a backup file…<input id="upFile" type="file" accept=".json,application/json" hidden></label>
   <div id="upResult" class="ro"></div>
 </aside>
+<aside class="panel" id="printPanel" hidden>
+  <h3>Print cue list</h3>
+  <form id="printForm" class="print-form">
+    <label class="wide">Preset<select id="printPreset" required></select></label>
+    <label>From segment<select id="printFrom"><option value="">Start</option></select></label>
+    <label>To segment<select id="printTo"><option value="">End</option></select></label>
+    <label class="wide"><span><input id="printCuts" type="checkbox"> Include cut cues</span></label>
+    <div class="rowb wide"><button class="btn primary" type="submit">Print</button><button class="btn" id="printCancel" type="button">Cancel</button></div>
+    <div class="ro wide" id="printStatus"></div>
+  </form>
+</aside>
+<section class="print-view" id="printView" hidden></section>
 <div class="toast" id="toast" hidden></div>
 
 <script src="config.js"></script>
@@ -283,6 +331,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   const SPEAKERS = ["klara", "gary", "cameron"];
   const DEPTS = ["light", "soundTech", "soundCue", "action", "videoCue", "beats"];
   const DEPT_SHORT = { light: "Light", soundTech: "Sound tech", soundCue: "Sound", action: "Action", videoCue: "Video", beats: "Beats" };
+  const PRINT_LABEL = { num: "#", key: "Key", segment: "Segment", at: "At", klara: "Klara", gary: "Gary", cameron: "Cameron", light: "Light", soundTech: "Sound tech", soundCue: "Sound cue", videoCue: "Video cue", action: "Action", beats: "Beats", go: "GO", pause: "Pause", notes: "Notes", director: "Director notes" };
   const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["pause", "Pause possible"], ["director", "Director notes"], ["cut", "Cut"]];
   const SUB_FIELDS = [["in", "In"], ["out", "Out"], ["speaker", "Speaker"], ["text", "Text"], ["notes", "Notes"]];
   const SUB_KEYS = ["segment"].concat(SUB_FIELDS.map(f => f[0]));
@@ -333,7 +382,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     }
     return ""; // Empty Text with an In is deliberately valid: it clears the screen.
   }
-  let segmentMap = { closing_key: "Closing", overrides: {} }, stillsManifest = null;
+  let segmentMap = { closing_key: "Closing", overrides: {} }, stillsManifest = null, printPresets = null;
   function acceptSegmentMap(data) {
     if (!data || typeof data !== "object") return;
     segmentMap = { closing_key: typeof data.closing_key === "string" ? data.closing_key : "Closing",
@@ -346,6 +395,16 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
   async function loadStillsManifest() {
     try { const response = await fetch("stills.json", { cache: "no-store" }); if (response.ok) stillsManifest = await response.json(); } catch {}
+  }
+  async function loadPrintPresets() {
+    try {
+      const response = await fetch("print_presets.json", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      const data = await response.json();
+      if (!data || !data.presets) throw new Error("no presets");
+      printPresets = data.presets;
+      populatePrintControls();
+    } catch { $("printStatus").textContent = "Print presets could not be loaded. Reload the page and try again."; }
   }
   const normalName = value => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
   function mapSegmentLabels(labels) {
@@ -536,6 +595,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       s.surtitles = viewLines().filter(line => line.segment === s.showKey || line.segment === s.label);
     });
     if (current >= segments.length) current = Math.max(0, segments.length - 1);
+    if (printPresets) populatePrintControls();
   }
   function matches(c) {
     if (filter === "klara" && !c.klara) return false;
@@ -1008,6 +1068,86 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
   const shortText = (value, limit) => { const text = String(value || "").replace(/\s+/g, " ").trim(); return text.length > limit ? text.slice(0, limit - 1) + "\u2026" : text; };
 
+  function populatePrintControls() {
+    if (!printPresets) return;
+    const preset = $("printPreset"), from = $("printFrom"), to = $("printTo");
+    const selected = preset.value;
+    preset.textContent = "";
+    for (const [key, value] of Object.entries(printPresets)) {
+      const option = el("option", null, value.label); option.value = key; preset.append(option);
+    }
+    if (selected && printPresets[selected]) preset.value = selected;
+    for (const [select, first] of [[from, "Start"], [to, "End"]]) {
+      const old = select.value; select.textContent = "";
+      const all = el("option", null, first); all.value = ""; select.append(all);
+      segments.forEach((segment, index) => { const option = el("option", null, segment.title); option.value = String(index); select.append(option); });
+      if (old && Number(old) < segments.length) select.value = old;
+    }
+  }
+
+  function selectedPrintSegments(preset) {
+    const first = $("printFrom").value === "" ? 0 : Number($("printFrom").value);
+    const last = $("printTo").value === "" ? segments.length - 1 : Number($("printTo").value);
+    if (first > last) throw new Error("The From segment must come before the To segment.");
+    const includeCut = $("printCuts").checked, relevance = preset.relevance || [];
+    const output = [];
+    for (const segment of segments.slice(first, last + 1)) {
+      const eligible = segment.cues.filter(cue => includeCut || !cue.cut);
+      let chosen;
+      if (preset.hide_empty === false) chosen = eligible.map(cue => [cue, false]);
+      else {
+        const primary = new Set();
+        eligible.forEach((cue, index) => { if (relevance.some(field => String(cue[field] || "").trim())) primary.add(index); });
+        const context = new Set();
+        if (preset.previous_speaker_context) primary.forEach(index => {
+          const before = index - 1;
+          if (before >= 0 && SPEAKERS.some(field => String(eligible[before][field] || "").trim())) context.add(before);
+        });
+        chosen = eligible.map((cue, index) => [cue, context.has(index) && !primary.has(index), index])
+          .filter(item => primary.has(item[2]) || context.has(item[2])).map(item => item.slice(0, 2));
+      }
+      if (chosen.length) output.push({ title: segment.title, cues: chosen });
+    }
+    return output;
+  }
+
+  function printContext(cue) {
+    return SPEAKERS.filter(field => cue[field]).map(field => `${PRINT_LABEL[field]}: ${shortText(cue[field], 60)}`).join(" / ");
+  }
+
+  function renderPrintView(presetKey) {
+    const preset = printPresets[presetKey], host = $("printView"); host.textContent = "";
+    const actions = el("div", "print-actions"), again = el("button", "btn primary", "Print / Save as PDF"), close = el("button", "btn", "Close preview");
+    again.onclick = () => window.print(); close.onclick = () => { document.body.classList.remove("print-previewing"); host.hidden = true; };
+    actions.append(again, close); host.append(actions, el("h1", null, `Puss cue list — ${preset.label}`));
+    const list = el("main", `print-list columns-${preset.columns || 1}`), selected = selectedPrintSegments(preset);
+    for (const segment of selected) {
+      const group = el("section", "print-segment"); group.append(el("h2", null, segment.title));
+      for (const [cue, isContext] of segment.cues) {
+        const row = el("article", "print-cue" + (isContext ? " context" : "") + (cue.cut ? " cut" : "")); row.dataset.key = cue.key;
+        const identity = preset.fields.includes("key") ? `${cue.num || "·"} ${cue.key}` : (cue.num || cue.key || "·");
+        row.append(el("span", "print-id", identity));
+        if (isContext) {
+          const line = el("span", "print-field"); line.append(el("b", null, "Context "), document.createTextNode(printContext(cue))); row.append(line);
+        } else for (const field of preset.fields) {
+          if (["num", "key", "segment"].includes(field)) continue;
+          let value = cue[field] || "";
+          if (field === "pause") value = value === "yes" ? "PAUSE POSSIBLE" : "";
+          const limit = preset.truncate && preset.truncate[field]; if (limit) value = shortText(value, limit);
+          if (value) { const line = el("span", `print-field field-${field}`); line.append(el("b", null, PRINT_LABEL[field] + " "), document.createTextNode(value)); row.append(line); }
+        }
+        group.append(row);
+      }
+      list.append(group);
+    }
+    if (!selected.length) list.append(el("p", null, "No cues match this preset and range."));
+    host.append(list);
+    const footer = el("footer", "print-footer");
+    footer.append(document.createTextNode(`Puss cue list · ${preset.label} · printed ${new Date().toISOString().slice(0, 10)} · page `), el("span", "page"));
+    host.append(footer); host.hidden = false; document.body.classList.add("print-previewing");
+    return selected.reduce((count, segment) => count + segment.cues.length, 0);
+  }
+
   function syncRunningOrder() {
     document.querySelector(".app").classList.toggle("running", runningOrder);
     $("runBtn").setAttribute("aria-pressed", String(runningOrder));
@@ -1238,7 +1378,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   $("q").oninput = e => { query = e.target.value.trim().toLowerCase(); render(); };
   function togglePanel(id, btn, onOpen) {
     const p = $(id); const open = p.hidden;
-    ["log", "bak"].forEach(x => $(x).hidden = true); ["logBtn", "bakBtn"].forEach(x => $(x).setAttribute("aria-expanded", "false"));
+    ["log", "bak", "printPanel"].forEach(x => $(x).hidden = true); ["logBtn", "bakBtn", "printBtn"].forEach(x => $(x).setAttribute("aria-expanded", "false"));
     p.hidden = !open; $(btn).setAttribute("aria-expanded", String(open)); if (open && onOpen) onOpen();
   }
   $("logBtn").onclick = () => togglePanel("log", "logBtn", async () => {
@@ -1247,6 +1387,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     catch { $("logList").textContent = "Can't reach the cue list right now."; }
   });
   $("bakBtn").onclick = () => togglePanel("bak", "bakBtn");
+  $("printBtn").onclick = () => togglePanel("printPanel", "printBtn", populatePrintControls);
+  $("printCancel").onclick = () => togglePanel("printPanel", "printBtn");
+  $("printForm").onsubmit = event => {
+    event.preventDefault();
+    if (!printPresets) { $("printStatus").textContent = "Print presets are still loading. Try again in a moment."; return; }
+    try {
+      const count = renderPrintView($("printPreset").value);
+      $("printPanel").hidden = true; $("printBtn").setAttribute("aria-expanded", "false");
+      setTimeout(() => window.print(), 0);
+      window.__cuebook.lastPrintCount = count;
+    } catch (error) { $("printStatus").textContent = error.message; }
+  };
   $("runBtn").onclick = () => { runningOrder = !runningOrder; ls.set("runningOrder", runningOrder); editingKey = null; editingLineKey = null; render(); $("main").scrollTop = 0; };
   $("retryBtn").onclick = () => { backoff = 2000; clearTimeout(retryTimer); flush(); };
   document.addEventListener("keydown", e => {
@@ -1298,10 +1450,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   if (drafts && Object.keys(drafts).length) editingKey = Object.keys(drafts)[0];
   if (lineDrafts && Object.keys(lineDrafts).length) editingLineKey = Object.keys(lineDrafts)[0];
   buildSegments(); render(); updateBar();
-  Promise.all([loadSegmentMap(), loadStillsManifest()]).then(() => { buildSegments(); render(); });
+  Promise.all([loadSegmentMap(), loadStillsManifest(), loadPrintPresets()]).then(() => { buildSegments(); render(); });
   if (!who || !pass) showGate(); else { refresh().then(flush); }
   if (outbox.length) toast(`${outbox.length} unsent change${outbox.length > 1 ? "s" : ""} from last time: sending now.`);
-  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, refresh, flush };
+  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, lastPrintCount: 0, refresh, flush, renderPrintView };
 })();
 </script>
 </body>

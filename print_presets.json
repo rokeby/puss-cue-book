@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "presets": {
+    "full": {
+      "label": "Full",
+      "fields": ["num", "key", "segment", "at", "klara", "gary", "cameron", "light", "soundTech", "soundCue", "videoCue", "action", "beats", "go", "pause", "notes", "director"],
+      "hide_empty": false,
+      "columns": 1
+    },
+    "stage-manager": {
+      "label": "Stage manager",
+      "fields": ["num", "segment", "light", "soundTech", "soundCue", "videoCue", "action", "go", "pause", "notes"],
+      "hide_empty": false,
+      "truncate": {"notes": 60},
+      "columns": 1
+    },
+    "klara": {
+      "label": "Klara",
+      "fields": ["num", "segment", "klara", "action", "go"],
+      "relevance": ["klara"],
+      "previous_speaker_context": true,
+      "columns": 2
+    },
+    "gary": {
+      "label": "Gary",
+      "fields": ["num", "segment", "gary", "action", "go"],
+      "relevance": ["gary"],
+      "previous_speaker_context": true,
+      "columns": 2
+    },
+    "cameron": {
+      "label": "Cameron",
+      "fields": ["num", "segment", "cameron", "action", "go"],
+      "relevance": ["cameron"],
+      "previous_speaker_context": true,
+      "columns": 2
+    },
+    "lighting": {
+      "label": "Lighting",
+      "fields": ["num", "segment", "light", "videoCue", "go"],
+      "relevance": ["light", "videoCue", "go"],
+      "columns": 2
+    },
+    "sound": {
+      "label": "Sound",
+      "fields": ["num", "segment", "soundTech", "soundCue", "go", "pause"],
+      "relevance": ["soundTech", "soundCue", "go", "pause"],
+      "columns": 2
+    }
+  }
+}
