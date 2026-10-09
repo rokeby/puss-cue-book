@@ -56,6 +56,7 @@ header.top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: c
 .links a:hover { border-color: var(--accent) }
 .tbtn { border: 1px solid var(--rule); background: transparent; border-radius: 8px; padding: 5px 11px; font-size: 13px }
 .tbtn[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
+.tbtn:disabled { opacity: .45; cursor: default }
 
 .savebar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 20px; font-size: 13px; border-bottom: 1px solid var(--rule); background: var(--paper) }
 .savebar .state { display: flex; align-items: center; gap: 7px; font-weight: 500 }
@@ -185,6 +186,11 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .editor label.wide { grid-column: 1 / -1 }
 .editor textarea, .editor input { min-height: 38px; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
 .editor textarea { resize: vertical }
+.field-help { display: block; color: var(--muted); font: 400 12px/1.35 var(--body); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere }
+.help-toggle { border: 0; background: transparent; color: var(--accent); padding: 0 3px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px }
+.help-more { grid-column: 1 / -1; margin: -2px 0 2px; padding: 7px 9px; border-left: 3px solid var(--accent); color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+.checkline { display: flex; align-items: center; gap: 6px }
+.checkline input { width: auto; min-height: 0 }
 .editor .row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .btn { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 6px 14px; font-weight: 500 }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
@@ -270,6 +276,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     </div>
     <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
     <span id="links" class="links"></span>
+    <button id="undoBtn" class="tbtn" type="button" disabled>Undo</button>
     <button id="runBtn" class="tbtn" aria-pressed="false">Running order</button>
     <button id="printBtn" class="tbtn" aria-expanded="false">Print…</button>
     <button id="logBtn" class="tbtn" aria-expanded="false">Changes</button>
@@ -432,6 +439,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   // ------------------------------------------------------------ state
   let who = ls.get("who", ""), pass = ls.get("pass", "");
   const client = ls.get("client", null) || (() => { const c = uid().slice(0, 12); ls.set("client", c); return c; })();
+  const undoKey = "undo." + client;
   let server = [];                 // cues as the server last told us
   let serverLines = [], surtitlesSupported = null, moveSupported = false;
   let outbox = ls.get("outbox", []);   // writes not yet acknowledged; survives reloads and closed tabs
@@ -443,11 +451,80 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   let runningOrder = ls.get("runningOrder", false);
   let lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
   let log = [];
+  let undoStack = ls.get(undoKey, []);
 
   function saveOutbox() { if (!ls.set("outbox", outbox)) toast("This browser can't keep unsent changes. Keep this tab open until the bar says Saved."); }
   function saveConflicts() { ls.set("conflicts", conflicts); }
   function saveDrafts() { ls.set("drafts", drafts); }
   function saveLineDrafts() { ls.set("lineDrafts", lineDrafts); }
+  function saveUndoStack() { ls.set(undoKey, undoStack); updateUndoButton(); }
+
+  function undoLabel(op) {
+    const sub = op.action === "saveLine" || op.action === "addLine";
+    if (op.action === "move") return `move ${op.key}`;
+    if (op.action === "add") return `add ${op.key}`;
+    if (op.action === "addLine") return `add surtitle ${op.key}`;
+    const field = Object.keys(op.patch || {})[0];
+    if (field === "cut") return `${op.patch.cut ? "cut" : "restore"} ${sub ? "surtitle " : "cue "}${op.key}`;
+    const labels = sub ? SUB_LABEL : LABEL;
+    return `${labels[field] || field || "change"} on ${op.key}`;
+  }
+
+  function moveUndo(op) {
+    const ordered = view(), at = ordered.findIndex(cue => cue.key === op.key);
+    if (at < 0) return null;
+    const oldBefore = at > 0 ? ordered[at - 1].key : "";
+    const without = ordered.filter(cue => cue.key !== op.key);
+    let insertAt = 0;
+    if (op.after) { const found = without.findIndex(cue => cue.key === op.after); insertAt = found < 0 ? without.length : found + 1; }
+    const before = insertAt > 0 ? without[insertAt - 1] : null, after = insertAt < without.length ? without[insertAt] : null;
+    const ord = before && after ? (before.ord + after.ord) / 2 : before ? before.ord + 10 : after ? after.ord - 10 : 10;
+    return { action: "move", key: op.key, after: oldBefore, base: { ord, before: before ? before.key : "", after: after ? after.key : "" } };
+  }
+
+  function inverseFor(op) {
+    let reverse = null;
+    if (op.action === "save" || op.action === "saveLine") reverse = { action: op.action, key: op.key, patch: Object.assign({}, op.base), base: Object.assign({}, op.patch) };
+    else if (op.action === "add") reverse = { action: "save", key: op.key, patch: { cut: true }, base: { cut: false } };
+    else if (op.action === "addLine") reverse = { action: "saveLine", key: op.key, patch: { cut: true }, base: { cut: false } };
+    else if (op.action === "move") reverse = moveUndo(op);
+    return reverse && { label: undoLabel(op), op: reverse };
+  }
+
+  function rememberUndo(entry, sourceOp) {
+    if (!entry) return;
+    entry.sourceOp = sourceOp;
+    undoStack.push(entry);
+    if (undoStack.length > 100) undoStack = undoStack.slice(-100);
+    saveUndoStack();
+  }
+
+  function discardUndoFor(sourceOp) {
+    const kept = undoStack.filter(entry => entry.sourceOp !== sourceOp);
+    if (kept.length !== undoStack.length) { undoStack = kept; saveUndoStack(); }
+  }
+
+  function updateUndoButton() {
+    const button = $("undoBtn"); if (!button) return;
+    const top = undoStack[undoStack.length - 1];
+    button.disabled = !top;
+    button.textContent = top ? "Undo: " + top.label : "Undo";
+    button.title = top ? "Undo this viewer's most recent change: " + top.label : "No change to undo";
+  }
+
+  function undoLast() {
+    const entry = undoStack.pop();
+    if (!entry) return;
+    if (entry.op.action === "save" && entry.op.patch && entry.op.patch.cut === true) {
+      delete drafts[entry.op.key]; saveDrafts(); if (editingKey === entry.op.key) editingKey = null;
+    }
+    if (entry.op.action === "saveLine" && entry.op.patch && entry.op.patch.cut === true) {
+      delete lineDrafts[entry.op.key]; saveLineDrafts(); if (editingLineKey === entry.op.key) editingLineKey = null;
+    }
+    saveUndoStack();
+    queue(entry.op, false);
+    toast("Undoing " + entry.label + "\u2026");
+  }
 
   // ------------------------------------------------------------ server
   async function call(req) {
@@ -512,6 +589,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
           delete conflicts[op.key]; saveConflicts();
         } else if (res.code === "conflict") {
           outbox.shift(); saveOutbox();
+          discardUndoFor(op.op);
           conflicts[op.key] = { op, items: res.conflicts }; saveConflicts();
           if (res.cue) upsert(res.cue);
           if (res.line) upsertLine(res.line);
@@ -520,6 +598,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         else {
           // the server is up but refused this write: keep it visible, never drop it silently
           outbox.shift(); saveOutbox();
+          discardUndoFor(op.op);
           conflicts[op.key] = { op, items: [], error: res.message || res.code }; saveConflicts();
         }
         backoff = 2000; lastError = "";
@@ -536,7 +615,11 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
   function upsert(cue) { const i = server.findIndex(c => c.key === cue.key); if (i >= 0) server[i] = cue; else server.push(cue); }
   function upsertLine(line) { const i = serverLines.findIndex(x => x.key === line.key); if (i >= 0) serverLines[i] = line; else serverLines.push(line); }
-  function queue(op) { op.op = uid(); op.who = who; op.client = client; outbox.push(op); saveOutbox(); buildSegments(); render(); updateBar(); flush(); }
+  function queue(op, recordUndo = true) {
+    const inverse = recordUndo ? inverseFor(op) : null;
+    op.op = uid(); op.who = who; op.client = client;
+    outbox.push(op); rememberUndo(inverse, op.op); saveOutbox(); buildSegments(); render(); updateBar(); flush();
+  }
 
   // What the page shows = the server's list with this device's unsent writes laid on top.
   function view() {
@@ -848,6 +931,38 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
   const fmt = v => v === true ? "cut" : v === false ? "not cut" : (String(v || "") || "(empty)");
 
+  // Semantics: At follows Tools/CueSheet/cue_sync.py parse_cue_time + the 9 Oct Cue Book plan;
+  // GO follows InfinityStageTransportController.cpp ParseMarkerLabel, go_markers_sync.py and P47_BREATH_NOTES.md.
+  const FIELD_HELP = {
+    at: {
+      hint: "Time from the start of this Passage, Scene or Interaction. Leave blank unless the cue needs a fixed time.",
+      title: "At is time from the start of this cue's Passage, Scene or Interaction, not time from the start of the whole show.",
+      more: "It follows this part of the show if that part is retimed. Use seconds (74.5), minutes and seconds (1:14.5), hours (0:01:14.5), or timecode (00:01:14:12, where the last number is frames at 25 fps). A GO needs an At time."
+    },
+    go: {
+      hint: "Cue number Klara presses GO on. HOLD stops; PASS marks without stopping; BREATH is a note only.",
+      title: "GO is a cue number for Klara, with an optional HOLD, PASS or BREATH mode.",
+      more: "Examples: 20 HOLD stops the show until GO is pressed; 21 PASS marks the point but does not stop; 22 BREATH records an authored breath for the cue book and never stops the show."
+    },
+    pause: {
+      hint: "An ambience moment where a breath could go.",
+      title: "Pause possible marks an ambience moment where a breath could go.",
+      more: "Tick this when the moment could hold a little longer for a live breath. It is a planning note, not a command that stops the show."
+    }
+  };
+
+  function addFieldHelp(label, field, control, key) {
+    const help = FIELD_HELP[field], hint = el("span", "field-help"), more = el("span", "help-more");
+    const hintId = `help-${key}-${field}`, moreId = `help-${key}-${field}-more`;
+    hint.id = hintId; more.id = moreId; more.hidden = true; more.textContent = help.more;
+    const toggle = el("button", "help-toggle", "?"); toggle.type = "button";
+    toggle.setAttribute("aria-label", `More help for ${LABEL[field]}`); toggle.setAttribute("aria-expanded", "false"); toggle.setAttribute("aria-controls", moreId);
+    toggle.onclick = event => { event.preventDefault(); event.stopPropagation(); const open = more.hidden; more.hidden = !open; toggle.setAttribute("aria-expanded", String(open)); };
+    hint.append(document.createTextNode(help.hint + " "), toggle);
+    control.title = help.title; control.setAttribute("aria-describedby", hintId);
+    label.append(hint, more);
+  }
+
   function editorView(c) {
     const d = drafts[c.key];
     const f = el("form", "editor"); f.onsubmit = ev => { ev.preventDefault(); save(c.key); };
@@ -865,7 +980,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         const box = el("input"); box.type = "checkbox"; box.id = `f-${c.key}-pause`; box.name = "pause";
         box.checked = (d.draft.pause || "") === "yes";
         box.onchange = () => { d.draft.pause = box.checked ? "yes" : ""; delete d.error; saveDrafts(); updateBar(); };
-        lab.append(box, document.createTextNode(" " + l));
+        const line = el("span", "checkline"); line.append(box, document.createTextNode(l)); lab.append(line);
+        addFieldHelp(lab, k, box, c.key);
         f.append(lab);
         continue;
       }
@@ -873,10 +989,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const field = (k === "at" || k === "go") ? el("input") : el("textarea");
       field.id = `f-${c.key}-${k}`; field.name = k; field.value = d.draft[k] ?? "";
       if (field.tagName === "TEXTAREA") field.rows = SPEAKERS.includes(k) ? 3 : 2;
-      if (k === "at") field.placeholder = "1:14.5";
-      if (k === "go") field.placeholder = "20 HOLD, 21 PASS or 22 BREATH";
+      if (k === "at") field.placeholder = "e.g. 74.5 or 1:14.5";
+      if (k === "go") field.placeholder = "e.g. 20 HOLD, 21 PASS or 22 BREATH";
       field.oninput = () => { d.draft[k] = field.value; delete d.error; saveDrafts(); updateBar(); };
-      lab.append(field); f.append(lab);
+      lab.append(field); if (FIELD_HELP[k]) addFieldHelp(lab, k, field, c.key); f.append(lab);
     }
     if (c.director) f.append(el("div", "ro wide", "Gary's director note (edited in the project): " + c.director));
     const row = el("div", "row");
@@ -1400,13 +1516,15 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     } catch (error) { $("printStatus").textContent = error.message; }
   };
   $("runBtn").onclick = () => { runningOrder = !runningOrder; ls.set("runningOrder", runningOrder); editingKey = null; editingLineKey = null; render(); $("main").scrollTop = 0; };
+  $("undoBtn").onclick = undoLast;
   $("retryBtn").onclick = () => { backoff = 2000; clearTimeout(retryTimer); flush(); };
   document.addEventListener("keydown", e => {
-    if (e.target.closest("input, textarea, select")) {
+    if (e.target.closest("input, textarea, select, [contenteditable]")) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && editingKey) { e.preventDefault(); save(editingKey); }
       else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && editingLineKey) { e.preventDefault(); saveLine(editingLineKey); }
       return;
     }
+    if (e.key.toLowerCase() === "z" && (e.ctrlKey || e.metaKey) && !e.altKey) { e.preventDefault(); undoLast(); return; }
     if (e.key === "ArrowRight" || e.key === "j") go(current + 1);
     if (e.key === "ArrowLeft" || e.key === "k") go(current - 1);
   });
@@ -1449,11 +1567,14 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   // ------------------------------------------------------------ start
   if (drafts && Object.keys(drafts).length) editingKey = Object.keys(drafts)[0];
   if (lineDrafts && Object.keys(lineDrafts).length) editingLineKey = Object.keys(lineDrafts)[0];
-  buildSegments(); render(); updateBar();
+  buildSegments(); render(); updateBar(); updateUndoButton();
   Promise.all([loadSegmentMap(), loadStillsManifest(), loadPrintPresets()]).then(() => { buildSegments(); render(); });
   if (!who || !pass) showGate(); else { refresh().then(flush); }
   if (outbox.length) toast(`${outbox.length} unsent change${outbox.length > 1 ? "s" : ""} from last time: sending now.`);
-  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, lastPrintCount: 0, refresh, flush, renderPrintView };
+  window.__cuebook = {
+    get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, get undoCount() { return undoStack.length; },
+    clearUndo() { undoStack = []; saveUndoStack(); }, lastPrintCount: 0, refresh, flush, renderPrintView
+  };
 })();
 </script>
 </body>
