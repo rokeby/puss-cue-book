@@ -81,6 +81,9 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .stepper { display: flex; gap: 8px; flex-wrap: wrap }
 .stepper button { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 7px 14px }
 .stepper button:disabled { opacity: .4; cursor: default }
+.railadd { padding: 6px; flex: none }
+.railadd > .btn { width: 100%; text-align: left }
+@media (max-width: 820px) { .railadd { min-width: 240px; align-self: center } }
 .segtools { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 12px }
 .nameform { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 440px }
 .nameform label { font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted) }
@@ -311,7 +314,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         const i = segments.findIndex(s => s.cues.some(c => c.key === editingKey));
         if (i >= 0) current = i;
       }
-      render(); updateBar();
+      if (!document.querySelector(".nameform")) render();   // don't wipe a name someone is typing
+      updateBar();
     } catch (e) { lastError = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection."; updateBar(); }
   }
 
@@ -443,6 +447,12 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       tx.append(el("span", n && filtering ? "hit" : null, filtering ? `${n} of ${s.cues.length} cues` : `${s.cues.length} cues`));
       b.append(th, tx); b.onclick = () => go(i); rail.append(b);
     });
+    if (segments.length) {
+      const host = el("div", "railadd");
+      const add = el("button", "btn", "+ New segment at the end");
+      add.onclick = () => nameForm(host, "New segment name", "", name => addSegmentAfter(segments[segments.length - 1], name), "Add segment");
+      host.append(add); rail.append(host);
+    }
   }
 
   function renderHero() {
@@ -465,12 +475,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const rename = el("button", "lnk", "Rename");
     rename.onclick = () => nameForm(tools, "Segment name", (first.videoCue || "").trim() ? first.videoCue : "", name => setVideoCue(first, name), "Rename");
     const addSeg = el("button", "lnk", "+ New segment after this one");
-    addSeg.onclick = () => nameForm(tools, "New segment name", "", name => {
-      const key = "W" + Date.now().toString(36).toUpperCase().slice(-7);
-      queue({ action: "add", key, after: s.cues[s.cues.length - 1].key, fields: { videoCue: name } });
-      const i = segments.findIndex(x => x.cues.some(c => c.key === key)); if (i >= 0) go(i);
-      toast(`Added “${name}”. Add its cues with “Add cue after”.`);
-    }, "Add segment");
+    addSeg.onclick = () => nameForm(tools, "New segment name", "", name => addSegmentAfter(s, name), "Add segment");
     tools.append(rename, addSeg);
     if (current > 0 && (first.videoCue || "").trim()) {
       const merge = el("button", "lnk", "Merge into the previous segment");
@@ -485,6 +490,13 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     }
     side.append(tools);
     h.append(fig, side);
+  }
+
+  function addSegmentAfter(s, name) {
+    const key = "W" + Date.now().toString(36).toUpperCase().slice(-7);
+    queue({ action: "add", key, after: s.cues[s.cues.length - 1].key, fields: { videoCue: name } });
+    const i = segments.findIndex(x => x.cues.some(c => c.key === key)); if (i >= 0) go(i);
+    toast(`Added “${name}”. Add its cues with “Add cue after”.`);
   }
 
   function setVideoCue(c, name) {
