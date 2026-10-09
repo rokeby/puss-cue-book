@@ -51,6 +51,9 @@ header.top { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: c
 .fchip { border: 1px solid var(--rule); background: transparent; border-radius: 999px; padding: 3px 11px; font-size: 13px; color: var(--muted) }
 .fchip[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink) }
 .search { border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 5px 10px; width: 180px; min-width: 0 }
+.links { display: flex; flex-wrap: wrap; gap: 6px }
+.links a { font-size: 13px; color: var(--accent); font-weight: 500; text-decoration: none; border: 1px solid var(--rule); border-radius: 8px; padding: 5px 11px }
+.links a:hover { border-color: var(--accent) }
 .tbtn { border: 1px solid var(--rule); background: transparent; border-radius: 8px; padding: 5px 11px; font-size: 13px }
 
 .savebar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; padding: 6px 20px; font-size: 13px; border-bottom: 1px solid var(--rule); background: var(--paper) }
@@ -203,6 +206,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       <button class="fchip" data-f="notes" aria-pressed="false">Has notes</button>
     </div>
     <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
+    <span id="links" class="links"></span>
     <button id="logBtn" class="tbtn" aria-expanded="false">Changes</button>
     <button id="bakBtn" class="tbtn" aria-expanded="false">Backup</button>
   </header>
@@ -308,6 +312,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const res = await call({ action: "list" });
       if (!res.ok) return handleRefused(res);
       server = res.cues; lastSync = Date.now(); lastError = "";
+      renderLinks(res.links);
       buildSegments();
       if (editingKey && !refresh.shownDraft) {          // an unsaved draft from last time: open its segment
         refresh.shownDraft = true;
@@ -497,6 +502,16 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     queue({ action: "add", key, after: s.cues[s.cues.length - 1].key, fields: { videoCue: name } });
     const i = segments.findIndex(x => x.cues.some(c => c.key === key)); if (i >= 0) go(i);
     toast(`Added “${name}”. Add its cues with “Add cue after”.`);
+  }
+
+  // Links from the private "links" tab: only ever arrive after the passcode, never in the public page.
+  function renderLinks(links) {
+    const box = $("links"); box.textContent = "";
+    for (const l of links || []) {
+      if (!/^https:\/\//.test(l.url)) continue;
+      const a = el("a", null, l.label + " ↗"); a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      box.append(a);
+    }
   }
 
   function setVideoCue(c, name) {
@@ -869,6 +884,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       if (!res.ok) { $("gErr").hidden = false; $("gErr").textContent = res.code === "wrong_passcode" ? "That passcode didn't work." : (res.message || "The server refused."); pass = ""; return; }
       ls.set("who", who); ls.set("pass", pass);
       server = res.cues; lastSync = Date.now(); $("gate").hidden = true;
+      renderLinks(res.links);
       buildSegments(); render(); updateBar(); flush();
     } catch (e) { $("gErr").hidden = false; $("gErr").textContent = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection and try again."; }
     finally { $("gGo").disabled = false; }

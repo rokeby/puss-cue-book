@@ -61,7 +61,17 @@ function doPost(e) {
 function list_() {
   var rows = readCues_().rows;
   rows.sort(function (a, b) { return a.ord - b.ord; });
-  return { ok: true, cues: rows, serverTime: Date.now() };
+  return { ok: true, cues: rows, links: readLinks_(), serverTime: Date.now() };
+}
+
+// Optional "links" tab (columns: label, url): links shown on the page only after sign-in, so private addresses
+// (the master cue Sheet) never appear in the public page or its code.
+function readLinks_() {
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('links');
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues()
+    .filter(function (v) { return v[0] && /^https:\/\//.test(String(v[1])); })
+    .map(function (v) { return { label: String(v[0]).slice(0, 60), url: String(v[1]) }; });
 }
 
 function readLog_(limit) {
