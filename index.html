@@ -824,6 +824,13 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const a = el("a", null, l.label + " ↗"); a.href = l.url; a.target = "_blank"; a.rel = "noopener noreferrer";
       box.append(a);
     }
+    // Gary's own shortcut to the Apps Script project behind the Cue Book (opens only for his Google account).
+    if (who === "Gary") {
+      const a = el("a", null, "App Data ↗");
+      a.href = "https://script.google.com/u/0/home/projects/1vfUjQJDse5NYFDTWRfiEkPIFZzAL_0xaN15mQJGgNNVpZ5WRNMofs0uN/edit";
+      a.target = "_blank"; a.rel = "noopener noreferrer"; a.title = "The Cue Book's Apps Script (redeploy here)";
+      box.append(a);
+    }
   }
 
   function setVideoCue(c, name) {
