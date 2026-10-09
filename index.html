@@ -922,7 +922,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     acts.append(e, a);
     const seg = segments[current];
     if (seg && seg.cues[0] && seg.cues[0].key !== c.key && !(c.videoCue || "").trim()) {
-      const split = el("button", "lnk", "Start new segment here");
+      const split = el("button", "lnk", "Make this cue start a new segment"); split.title = "Moves this cue and everything after it into a new segment; the cue keeps its own text.";
       split.onclick = ev => {
         ev.stopPropagation();
         const host = el("div"); body.append(host);
