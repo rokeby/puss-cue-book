@@ -123,11 +123,16 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .pill.bad { background: var(--cut) }
 .lnk { border: 0; background: transparent; color: var(--accent); padding: 2px 4px; font-size: 13px; font-weight: 500 }
 .blankcue { color: var(--muted); font-style: italic; font-size: 14px }
+.timing { display: flex; flex-wrap: wrap; gap: 6px; font: 500 12px var(--mono); color: var(--muted) }
+.timing span { border: 1px solid var(--rule); border-radius: 6px; padding: 2px 7px }
+.surtitle .num strong { font-size: 14px }
+.clear-screen { color: var(--muted); font-style: italic }
 
 .editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px }
 .editor label { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); min-width: 0 }
 .editor label.wide { grid-column: 1 / -1 }
-.editor textarea { min-height: 38px; resize: vertical; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
+.editor textarea, .editor input { min-height: 38px; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
+.editor textarea { resize: vertical }
 .editor .row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
 .btn { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 6px 14px; font-weight: 500 }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
@@ -246,14 +251,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   const FIELDS = [
     ["klara", "Klara speaks"], ["gary", "Gary speaks"], ["cameron", "Cameron speaks"],
     ["light", "Light"], ["soundTech", "Sound tech"], ["soundCue", "Sound cue"],
-    ["action", "Action"], ["videoCue", "Video cue"], ["beats", "Beats"], ["notes", "Notes"]
+    ["action", "Action"], ["videoCue", "Video cue"], ["beats", "Beats"], ["notes", "Notes"],
+    ["at", "At (time in segment)"], ["go", "GO"]
   ];
   const FKEYS = FIELDS.map(f => f[0]);
   const LABEL = Object.fromEntries(FIELDS);
   const SPEAKERS = ["klara", "gary", "cameron"];
   const DEPTS = ["light", "soundTech", "soundCue", "action", "videoCue", "beats"];
   const DEPT_SHORT = { light: "Light", soundTech: "Sound tech", soundCue: "Sound", action: "Action", videoCue: "Video", beats: "Beats" };
-  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["director", "Director notes"], ["cut", "Cut"]];
+  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["director", "Director notes"], ["cut", "Cut"]];
+  const SUB_FIELDS = [["in", "In"], ["out", "Out"], ["speaker", "Speaker"], ["text", "Text"], ["notes", "Notes"]];
+  const SUB_KEYS = ["segment"].concat(SUB_FIELDS.map(f => f[0]));
+  const SUB_LABEL = Object.fromEntries([["segment", "Segment"]].concat(SUB_FIELDS));
   // Segment name in the shared Sheet -> still captured in Unreal. Captioned with the Unreal id so a mismatch is visible.
   const STILLS = [
     [/^passage 1\b/i, "P01", "8 Oct"], [/^s(cene)? ?1\b/i, "S1", "8 Oct"],
@@ -272,21 +281,65 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     del(k) { try { localStorage.removeItem("cuebook." + k); } catch {} }
   };
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+  function parseTime(text) {
+    const raw = String(text ?? "").trim(), fields = raw.split(":");
+    if (!raw || fields.length < 1 || fields.length > 4 || fields.some(f => !/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(f.trim()))) return null;
+    const v = fields.map(Number);
+    if (v.length === 4 && v[3] >= 25) return null;
+    if (v.length === 1) return v[0];
+    if (v.length === 2) return v[0] * 60 + v[1];
+    if (v.length === 3) return v[0] * 3600 + v[1] * 60 + v[2];
+    return v[0] * 3600 + v[1] * 60 + v[2] + v[3] / 25;
+  }
+  function cueTimingError(cue) {
+    const at = String(cue.at || "").trim(), go = String(cue.go || "").trim();
+    if (at && parseTime(at) == null) return "At must be seconds, m:ss.s, h:mm:ss.s, or hh:mm:ss:ff (ff below 25).";
+    if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS]" (uppercase).';
+    if (go && !at) return "GO needs an At time.";
+    return "";
+  }
+  function lineError(line) {
+    if (!String(line.segment || "").trim()) return "Choose a segment.";
+    const input = parseTime(line.in);
+    if (input == null) return "In must be seconds, m:ss.s, h:mm:ss.s, or hh:mm:ss:ff (ff below 25).";
+    if (String(line.out || "").trim()) {
+      const output = parseTime(line.out);
+      if (output == null) return "Out is not a valid time.";
+      if (output <= input) return "Out must be after In.";
+    }
+    return ""; // Empty Text with an In is deliberately valid: it clears the screen.
+  }
+  let segmentMap = {};
+  function acceptSegmentMap(data) {
+    const source = data && (data.segments || data);
+    if (Array.isArray(source)) source.forEach(x => { if (x && (x.label || x.name) && (x.key || x.id)) segmentMap[x.label || x.name] = x.key || x.id; });
+    else if (source && typeof source === "object") Object.entries(source).forEach(([label, value]) => { if (typeof value === "string") segmentMap[label] = value; });
+  }
+  async function loadSegmentMap() {
+    for (const path of ["segment_map.json", "../segment_map.json"]) {
+      try { const response = await fetch(path, { cache: "no-store" }); if (response.ok) { acceptSegmentMap(await response.json()); break; } } catch {}
+    }
+  }
+  const segmentKey = label => segmentMap[label] || label;
 
   // ------------------------------------------------------------ state
   let who = ls.get("who", ""), pass = ls.get("pass", "");
   const client = ls.get("client", null) || (() => { const c = uid().slice(0, 12); ls.set("client", c); return c; })();
   let server = [];                 // cues as the server last told us
+  let serverLines = [], surtitlesSupported = null;
   let outbox = ls.get("outbox", []);   // writes not yet acknowledged; survives reloads and closed tabs
   let conflicts = ls.get("conflicts", {});  // key -> {op, items:[{field, theirs, yours, base}]}
   let drafts = ls.get("drafts", {});        // key -> {base, draft} while a cue is open
+  let lineDrafts = ls.get("lineDrafts", {});
   let segments = [], current = ls.get("seg", 0), filter = ls.get("filter", "all"), query = "";
-  let editingKey = null, lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
+  let editingKey = null, editingLineKey = null, showSurtitles = ls.get("showSurtitles", false);
+  let lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
   let log = [];
 
   function saveOutbox() { if (!ls.set("outbox", outbox)) toast("This browser can't keep unsent changes. Keep this tab open until the bar says Saved."); }
   function saveConflicts() { ls.set("conflicts", conflicts); }
   function saveDrafts() { ls.set("drafts", drafts); }
+  function saveLineDrafts() { ls.set("lineDrafts", lineDrafts); }
 
   // ------------------------------------------------------------ server
   async function call(req) {
@@ -312,6 +365,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const res = await call({ action: "list" });
       if (!res.ok) return handleRefused(res);
       server = res.cues; lastSync = Date.now(); lastError = "";
+      surtitlesSupported = Array.isArray(res.surtitles);
+      serverLines = surtitlesSupported ? res.surtitles : [];
       renderLinks(res.links);
       buildSegments();
       if (editingKey && !refresh.shownDraft) {          // an unsaved draft from last time: open its segment
@@ -344,11 +399,13 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         if (res.ok) {
           outbox.shift(); saveOutbox();
           if (res.cue) upsert(res.cue);
+          if (res.line) upsertLine(res.line);
           delete conflicts[op.key]; saveConflicts();
         } else if (res.code === "conflict") {
           outbox.shift(); saveOutbox();
           conflicts[op.key] = { op, items: res.conflicts }; saveConflicts();
           if (res.cue) upsert(res.cue);
+          if (res.line) upsertLine(res.line);
           toast("Someone else changed " + op.key + " too. Choose which version to keep.");
         } else if (res.code === "wrong_passcode") { handleRefused(res); return; }
         else {
@@ -369,6 +426,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     updateBar();
   }
   function upsert(cue) { const i = server.findIndex(c => c.key === cue.key); if (i >= 0) server[i] = cue; else server.push(cue); }
+  function upsertLine(line) { const i = serverLines.findIndex(x => x.key === line.key); if (i >= 0) serverLines[i] = line; else serverLines.push(line); }
   function queue(op) { op.op = uid(); op.who = who; op.client = client; outbox.push(op); saveOutbox(); buildSegments(); render(); updateBar(); flush(); }
 
   // What the page shows = the server's list with this device's unsent writes laid on top.
@@ -383,6 +441,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       }
     }
     return [...map.values()].sort((a, b) => a.ord - b.ord);
+  }
+  function viewLines() {
+    const map = new Map(serverLines.map(line => [line.key, Object.assign({}, line)]));
+    for (const op of outbox) {
+      if (op.action === "saveLine" && map.has(op.key)) { Object.assign(map.get(op.key), op.patch); map.get(op.key)._pending = true; }
+      if (op.action === "addLine" && !map.has(op.key)) {
+        const line = Object.assign({ key: op.key, ord: Number(op.ord) || Date.now(), cut: false, _pending: true }, op.fields || {});
+        map.set(op.key, line);
+      }
+    }
+    for (const [key, draft] of Object.entries(lineDrafts)) if (draft.isNew && !map.has(key)) map.set(key, Object.assign({ key, ord: Date.now(), cut: false, _draft: true }, draft.draft));
+    return [...map.values()].sort((a, b) => (parseTime(a.in) ?? Infinity) - (parseTime(b.in) ?? Infinity) || (a.ord || 0) - (b.ord || 0));
   }
 
   // ------------------------------------------------------------ segments and filters
@@ -402,6 +472,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       s.title = /^transition$/i.test(s.label) ? "Transition" + (next ? " → " + next.label : "") : s.label;
       const m = STILLS.find(([re]) => re.test(s.label));
       s.still = m ? { id: m[1], date: m[2] } : null;
+      const key = segmentKey(s.label);
+      s.surtitles = viewLines().filter(line => line.segment === key || line.segment === s.label);
     });
     if (current >= segments.length) current = Math.max(0, segments.length - 1);
   }
@@ -420,7 +492,9 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   function updateBar() {
     const bar = $("savebar"), dot = $("dot"), txt = $("stateTxt"), more = $("stateMore");
     const n = outbox.length, nc = Object.keys(conflicts).length;
-    const openDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    const cueDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    const lineDirty = editingLineKey && lineDrafts[editingLineKey] && (lineDrafts[editingLineKey].isNew || SUB_KEYS.some(f => (lineDrafts[editingLineKey].draft[f] || "") !== (lineDrafts[editingLineKey].base[f] || "")));
+    const openDirty = cueDirty || lineDirty;
     let kind = "ok", t = "All changes saved", m = lastSync ? "Up to date " + clock(lastSync) : "";
     if (n) { kind = "busy"; t = flushing ? `Saving ${n} change${n > 1 ? "s" : ""}…` : `${n} change${n > 1 ? "s" : ""} waiting to send`; m = "Kept on this device until the server confirms."; }
     if (lastError) { kind = n ? "bad" : "bad"; t = n ? `${n} change${n > 1 ? "s" : ""} not sent yet` : "Not connected"; m = lastError + (retryAt > Date.now() ? " Trying again at " + clock(retryAt) + "." : ""); }
@@ -474,6 +548,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const prev = el("button", null, "← Previous"); prev.disabled = current === 0; prev.onclick = () => go(current - 1);
     const next = el("button", null, "Next →"); next.disabled = current >= segments.length - 1; next.onclick = () => go(current + 1);
     st.append(prev, next); side.append(st);
+    const subToggle = el("button", "btn", showSurtitles ? "Show cues" : `Surtitles (${(s.surtitles || []).filter(x => !x.cut).length})`);
+    subToggle.type = "button";
+    subToggle.onclick = () => { showSurtitles = !showSurtitles; ls.set("showSurtitles", showSurtitles); editingKey = null; editingLineKey = null; render(); };
+    side.append(subToggle);
     // Segment tools. A segment is the run of cues from one cue with a Video cue to the next; its name IS that Video cue.
     const tools = el("div", "segtools");
     const first = s.cues[0];
@@ -560,6 +638,12 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (dz.childNodes.length) body.append(dz);
     if (c.notes) { any = true; const n = el("div", "note"); n.append(el("b", null, "Note: "), document.createTextNode(c.notes)); body.append(n); }
     if (c.director) { any = true; const n = el("div", "note"); n.append(el("b", null, "Gary (director): "), document.createTextNode(c.director)); body.append(n); }
+    if (c.at || c.go) {
+      any = true; const timing = el("div", "timing");
+      if (c.at) timing.append(el("span", null, "At " + c.at));
+      if (c.go) timing.append(el("span", null, "GO " + c.go));
+      body.append(timing);
+    }
     if (!any) body.append(el("div", "blankcue", "Empty cue"));
     const meta = el("div", "meta");
     const left = el("span");
@@ -627,11 +711,19 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const cur = server.find(x => x.key === c.key) || c;
     const moved = FKEYS.filter(k => (cur[k] || "") !== (d.base[k] || ""));
     if (moved.length) f.append(el("div", "warn", `${cur.updatedBy || "Someone"} changed ${moved.map(k => LABEL[k]).join(", ")} since you opened this cue. If you also changed those, you'll be asked which to keep when you save.`));
+    if (d.error) f.append(el("div", "warn", d.error));
     for (const [k, l] of FIELDS) {
+      // The old script drops at/go without saying so (its save skips unknown fields), so offer them only once
+      // the updated script answers (it also returns the surtitles list).
+      if ((k === "at" || k === "go") && !surtitlesSupported) continue;
       const lab = el("label", SPEAKERS.includes(k) || k === "notes" ? "wide" : null, l);
-      const ta = el("textarea"); ta.id = `f-${c.key}-${k}`; ta.name = k; ta.value = d.draft[k] ?? ""; ta.rows = SPEAKERS.includes(k) ? 3 : 2;
-      ta.oninput = () => { d.draft[k] = ta.value; saveDrafts(); updateBar(); };
-      lab.append(ta); f.append(lab);
+      const field = (k === "at" || k === "go") ? el("input") : el("textarea");
+      field.id = `f-${c.key}-${k}`; field.name = k; field.value = d.draft[k] ?? "";
+      if (field.tagName === "TEXTAREA") field.rows = SPEAKERS.includes(k) ? 3 : 2;
+      if (k === "at") field.placeholder = "1:14.5";
+      if (k === "go") field.placeholder = "20 HOLD";
+      field.oninput = () => { d.draft[k] = field.value; delete d.error; saveDrafts(); updateBar(); };
+      lab.append(field); f.append(lab);
     }
     if (c.director) f.append(el("div", "ro wide", "Gary's director note (edited in the project): " + c.director));
     const row = el("div", "row");
@@ -644,6 +736,124 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     return f;
   }
 
+  function startLineEdit(line, isNew = false) {
+    if (editingLineKey && editingLineKey !== line.key && lineDrafts[editingLineKey]) {
+      toast(`Save or discard ${editingLineKey} first`); return;
+    }
+    if (!lineDrafts[line.key]) {
+      const src = serverLines.find(x => x.key === line.key) || line;
+      const base = Object.fromEntries(SUB_KEYS.map(k => [k, src[k] || ""]));
+      lineDrafts[line.key] = { base, draft: Object.assign({}, base), isNew };
+      saveLineDrafts();
+    }
+    editingLineKey = line.key; editingKey = null; buildSegments(); renderCues(); updateBar();
+  }
+
+  function addLine() {
+    const s = segments[current]; if (!s) return;
+    const key = "T" + Date.now().toString(36).toUpperCase();
+    const line = { key, segment: segmentKey(s.label), in: "", out: "", speaker: "", text: "", notes: "" };
+    startLineEdit(line, true);
+  }
+
+  function saveLine(key) {
+    const d = lineDrafts[key]; if (!d) return;
+    const error = lineError(d.draft);
+    if (error) { d.error = error; saveLineDrafts(); renderCues(); return; }
+    if (d.isNew) {
+      const siblings = viewLines().filter(line => line.segment === d.draft.segment && line.key !== key && !line._draft);
+      queue({ action: "addLine", key, after: siblings.length ? siblings[siblings.length - 1].key : "", fields: Object.assign({}, d.draft) });
+    } else {
+      const patch = {}, base = {};
+      for (const field of SUB_KEYS) {
+        const value = (d.draft[field] || "").replace(/\s+$/, "");
+        if (value !== (d.base[field] || "")) { patch[field] = value; base[field] = d.base[field] || ""; }
+      }
+      if (Object.keys(patch).length) queue({ action: "saveLine", key, patch, base });
+    }
+    delete lineDrafts[key]; saveLineDrafts(); editingLineKey = null; render(); updateBar();
+  }
+
+  function toggleLineCut(line) {
+    const cur = serverLines.find(x => x.key === line.key) || line;
+    delete lineDrafts[line.key]; saveLineDrafts(); editingLineKey = null;
+    queue({ action: "saveLine", key: line.key, patch: { cut: !cur.cut }, base: { cut: !!cur.cut } });
+  }
+
+  function lineConflictView(line) {
+    const info = conflicts[line.key], box = el("div", "conf");
+    if (info.error) {
+      box.append(el("h4", null, "This change was not saved"), el("div", null, info.error));
+      const dismiss = el("button", "btn", "Dismiss"); dismiss.onclick = () => { delete conflicts[line.key]; saveConflicts(); render(); updateBar(); };
+      box.append(dismiss); return box;
+    }
+    box.append(el("h4", null, "Someone else changed this surtitle while you were editing"));
+    for (const item of info.items) {
+      const label = item.field === "cut" ? "Cut" : SUB_LABEL[item.field] || item.field;
+      const pair = el("div", "pair");
+      const theirs = el("div"); theirs.append(el("b", null, label + ": theirs (saved now)"), document.createTextNode(fmt(item.theirs)));
+      const yours = el("div"); yours.append(el("b", null, label + ": yours (not saved)"), document.createTextNode(fmt(item.yours)));
+      pair.append(theirs, yours); box.append(pair);
+    }
+    const row = el("div", "rowb"), mine = el("button", "btn primary", "Keep mine"), theirs = el("button", "btn", "Keep theirs");
+    mine.onclick = () => {
+      const cur = serverLines.find(x => x.key === line.key) || {}, patch = {}, base = {};
+      for (const item of info.items) { patch[item.field] = item.yours; base[item.field] = cur[item.field] ?? (item.field === "cut" ? false : ""); }
+      delete conflicts[line.key]; saveConflicts(); queue({ action: "saveLine", key: line.key, patch, base });
+    };
+    theirs.onclick = () => { delete conflicts[line.key]; saveConflicts(); render(); updateBar(); };
+    row.append(mine, theirs); box.append(row); return box;
+  }
+
+  function lineEditorView(line) {
+    const d = lineDrafts[line.key], form = el("form", "editor");
+    form.onsubmit = event => { event.preventDefault(); saveLine(line.key); };
+    if (d.error) form.append(el("div", "warn", d.error));
+    form.append(el("div", "ro wide", "Segment: " + d.draft.segment));
+    for (const [field, label] of SUB_FIELDS) {
+      const lab = el("label", field === "text" || field === "notes" ? "wide" : null, label);
+      const input = field === "text" || field === "notes" ? el("textarea") : el("input");
+      input.value = d.draft[field] || ""; input.name = field; input.id = `sub-${line.key}-${field}`;
+      if (field === "in" || field === "out") input.placeholder = field === "in" ? "1:14.5" : "blank = until next line";
+      if (input.tagName === "TEXTAREA") input.rows = field === "text" ? 3 : 2;
+      input.oninput = () => { d.draft[field] = input.value; delete d.error; saveLineDrafts(); updateBar(); };
+      lab.append(input); form.append(lab);
+    }
+    form.append(el("div", "ro wide", "Empty Text is valid: it clears the screen at In."));
+    const row = el("div", "row"), saveButton = el("button", "btn primary", d.isNew ? "Add line" : "Save");
+    saveButton.type = "submit";
+    const discard = el("button", "btn", "Discard changes"); discard.type = "button";
+    discard.onclick = () => { delete lineDrafts[line.key]; saveLineDrafts(); editingLineKey = null; render(); updateBar(); };
+    row.append(saveButton, discard);
+    if (!d.isNew) { const cut = el("button", "btn danger", line.cut ? "Restore line" : "Mark as cut"); cut.type = "button"; cut.onclick = () => toggleLineCut(line); row.append(cut); }
+    form.append(row); return form;
+  }
+
+  function lineView(line) {
+    const card = el("article", "cue surtitle" + (line.cut ? " cut" : "") + (line._pending ? " pending" : "") + (conflicts[line.key] ? " conflict" : ""));
+    const num = el("div", "num"); num.append(el("strong", null, line.in || "time?"), document.createTextNode(line.key)); card.append(num);
+    const body = el("div", "body"); card.append(body);
+    if (conflicts[line.key]) body.append(lineConflictView(line));
+    if (editingLineKey === line.key) { body.append(lineEditorView(line)); return card; }
+    const timing = el("div", "timing"); timing.append(el("span", null, "In " + (line.in || "?")), el("span", null, line.out ? "Out " + line.out : "Out: next line/end")); body.append(timing);
+    if (line.speaker) { const speaker = el("div", "line"); speaker.append(el("div", "who", line.speaker), el("div", "txt", line.text || "(clear screen)")); body.append(speaker); }
+    else body.append(el("div", line.text ? "txt" : "clear-screen", line.text || "Clear screen"));
+    if (line.notes) { const note = el("div", "note"); note.append(el("b", null, "Note: "), document.createTextNode(line.notes)); body.append(note); }
+    const meta = el("div", "meta"), left = el("span", null, line._pending ? "Saving…" : (line.updatedAt ? `Changed ${ago(line.updatedAt)} by ${line.updatedBy || "someone"}` : ""));
+    const acts = el("div", "acts"), edit = el("button", "lnk", lineDrafts[line.key] ? "Continue editing" : "Edit"), add = el("button", "lnk", "Add line");
+    edit.onclick = () => startLineEdit(line); add.onclick = () => addLine(); acts.append(edit, add); meta.append(left, acts); body.append(meta);
+    return card;
+  }
+
+  function renderSurtitles(box) {
+    const s = segments[current];
+    if (!surtitlesSupported) { box.append(el("div", "empty-state", "Surtitles need the updated script. Cues still work; ask Gary to redeploy Code.gs.")); return; }
+    const lines = (s.surtitles || []).filter(line => line.segment === segmentKey(s.label) || line.segment === s.label);
+    if (!lines.length) box.append(el("div", "empty-state", "No surtitles in this segment. Add a time-coded line, or leave it empty."));
+    lines.forEach(line => box.append(lineView(line)));
+    const add = el("button", "btn", "+ Add a surtitle line"); add.style.alignSelf = "flex-start"; add.onclick = addLine; box.append(add);
+  }
+
   function renderCues() {
     const box = $("cues");
     const keepFocus = document.activeElement && box.contains(document.activeElement) && document.activeElement.id;
@@ -651,6 +861,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     box.textContent = "";
     const s = segments[current];
     if (!s) { box.append(el("div", "empty-state", server.length ? "No segments." : "The shared cue list is empty. Gary loads it once: Backup, then Choose a backup file, then the seed file from the project.")); return; }
+    if (showSurtitles) { renderSurtitles(box); return; }
     const shown = s.cues.filter(c => matches(c) || c.key === editingKey || conflicts[c.key]);
     if (!shown.length) box.append(el("div", "empty-state", "No cues in this segment match the filter. Choose Everything, or pick another segment on the left."));
     for (const c of shown) box.append(cueView(c));
@@ -664,9 +875,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     for (const e of log) {
       if (e.field === "_seed") continue;
       const li = el("li");
-      const what = e.field === "_new" ? "added a cue" : e.field === "cut" ? (String(e.after) === "true" ? "marked a cue as cut" : "restored a cut cue") : `changed ${LABEL[e.field] || e.field}`;
+      const sub = String(e.field || "").startsWith("sub:"), field = sub ? e.field.slice(4) : e.field;
+      const what = field === "_new" ? (sub ? "added a surtitle" : "added a cue") : field === "cut" ? (String(e.after) === "true" ? `marked a ${sub ? "surtitle" : "cue"} as cut` : `restored a cut ${sub ? "surtitle" : "cue"}`) : `changed ${sub ? (SUB_LABEL[field] || field) : (LABEL[field] || field)}`;
       const head = el("div"); head.append(el("b", null, e.who || "Someone"), document.createTextNode(` ${what} in ${e.key}`)); li.append(head);
-      if (e.field !== "_new" && e.field !== "cut") li.append(el("div", "ro", `“${trim(e.before) || "(empty)"}” → “${trim(e.after) || "(empty)"}”`));
+      if (field !== "_new" && field !== "cut") li.append(el("div", "ro", `“${trim(e.before) || "(empty)"}” → “${trim(e.after) || "(empty)"}”`));
       li.append(el("div", "when", ago(e.at)));
       const j = el("button", "lnk", "Show"); j.onclick = () => jumpTo(e.key); li.append(j);
       ol.append(li);
@@ -701,6 +913,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 
   function save(key) {
     const d = drafts[key]; if (!d) return;
+    const timingError = cueTimingError(d.draft);
+    if (timingError) { d.error = timingError; saveDrafts(); renderCues(); return; }
     const patch = {}, base = {};
     for (const k of FKEYS) { const v = (d.draft[k] || "").replace(/\s+$/, ""); if (v !== (d.base[k] || "")) { patch[k] = v; base[k] = d.base[k] || ""; } }
     delete drafts[key]; saveDrafts(); editingKey = null;
@@ -728,7 +942,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
   const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, "");
-  $("dlJson").onclick = () => download(`PussCueBook_${stamp()}.json`, JSON.stringify({ app: "puss-cue-book", saved: new Date().toISOString(), cues: view().map(strip) }, null, 1), "application/json");
+  $("dlJson").onclick = () => download(`PussCueBook_${stamp()}.json`, JSON.stringify({ app: "puss-cue-book", saved: new Date().toISOString(), cues: view().map(strip), surtitles: viewLines().filter(x => !x._draft).map(strip) }, null, 1), "application/json");
   $("dlCsv").onclick = () => {
     const q = v => { v = String(v ?? ""); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     const lines = [CSV_COLS.map(c => q(c[1])).join(",")].concat(view().map(c => CSV_COLS.map(([k]) => q(k === "cut" ? (c.cut ? "yes" : "") : c[k])).join(",")));
@@ -795,6 +1009,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   // the value the Cue Book was last known to hold: if someone has changed that field on the page since, the server
   // returns a conflict and both versions are shown. Nothing applies until the person confirms.
   function previewChanges(data, out) {
+    if (data.target === "surtitles") return previewSurtitleChanges(data, out);
     const now = new Map(view().map(c => [c.key, c]));
     const byKey = new Map();
     for (const ch of data.changes || []) {
@@ -831,6 +1046,37 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     row.append(yes, no); out.append(row);
   }
 
+  function previewSurtitleChanges(data, out) {
+    const now = new Map(viewLines().map(line => [line.key, line])), byKey = new Map();
+    for (const change of data.changes || []) {
+      if (!SUB_KEYS.includes(change.field) && change.field !== "cut") continue;
+      const op = byKey.get(change.key) || { action: "saveLine", key: change.key, patch: {}, base: {} };
+      op.patch[change.field] = change.to; op.base[change.field] = change.from; byKey.set(change.key, op);
+    }
+    const ops = [], descriptions = []; let already = 0, missing = 0;
+    for (const op of byKey.values()) {
+      const line = now.get(op.key); if (!line) { missing++; continue; }
+      const fields = Object.keys(op.patch).filter(field => (field === "cut" ? !!line.cut : (line[field] || "")) !== op.patch[field]);
+      if (!fields.length) { already++; continue; }
+      fields.forEach(field => { if (field !== "cut" && (line[field] || "") !== (op.base[field] || "")) op.edited = true; });
+      ops.push(op);
+      descriptions.push(`${op.key}: ${fields.map(field => field === "cut" ? "mark as cut" : `${SUB_LABEL[field]} -> ${trim(op.patch[field]) || "(empty)"}`).join("; ")}` + (op.edited ? " (also changed in the Cue Book: you'll choose which to keep)" : ""));
+    }
+    for (const add of data.adds || []) {
+      if (now.has(add.key)) { already++; continue; }
+      ops.push({ action: "addLine", key: add.key, after: add.after, fields: add.fields });
+      descriptions.push(`New surtitle ${add.key} in ${add.fields.segment} at ${add.fields.in}: ${trim(add.fields.text) || "clear screen"}`);
+    }
+    out.textContent = "";
+    if (!ops.length) { out.textContent = "The Cue Book already has all Unreal surtitle edits."; return; }
+    out.append(el("div", null, `Surtitles changed in Unreal: ${ops.length} to apply` + (already ? `, ${already} already here` : "") + (missing ? `, ${missing} missing from this Cue Book` : "") + "."));
+    const ul = el("ul"); descriptions.forEach(description => ul.append(el("li", null, description))); out.append(ul);
+    const row = el("div", "rowb"), yes = el("button", "btn primary", `Apply ${ops.length} surtitle change${ops.length === 1 ? "" : "s"}`), no = el("button", "btn", "Cancel");
+    yes.onclick = () => { ops.forEach(op => { delete op.edited; queue(op); }); out.textContent = "Applying surtitle changes. Watch the save bar."; showSurtitles = true; ls.set("showSurtitles", true); };
+    no.onclick = () => { out.textContent = "Nothing was changed."; };
+    row.append(yes, no); out.append(row);
+  }
+
   // ------------------------------------------------------------ chrome
   let toastT;
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 3200); }
@@ -853,13 +1099,16 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   document.addEventListener("keydown", e => {
     if (e.target.closest("input, textarea, select")) {
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && editingKey) { e.preventDefault(); save(editingKey); }
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && editingLineKey) { e.preventDefault(); saveLine(editingLineKey); }
       return;
     }
     if (e.key === "ArrowRight" || e.key === "j") go(current + 1);
     if (e.key === "ArrowLeft" || e.key === "k") go(current - 1);
   });
   window.addEventListener("beforeunload", e => {
-    const openDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    const cueDirty = editingKey && drafts[editingKey] && FKEYS.some(f => (drafts[editingKey].draft[f] || "") !== (drafts[editingKey].base[f] || ""));
+    const lineDirty = editingLineKey && lineDrafts[editingLineKey] && (lineDrafts[editingLineKey].isNew || SUB_KEYS.some(f => (lineDrafts[editingLineKey].draft[f] || "") !== (lineDrafts[editingLineKey].base[f] || "")));
+    const openDirty = cueDirty || lineDirty;
     if (outbox.length || openDirty) { e.preventDefault(); e.returnValue = ""; }
   });
   window.addEventListener("online", () => { backoff = 2000; flush(); refresh(); });
@@ -883,7 +1132,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const res = await call({ action: "list" });
       if (!res.ok) { $("gErr").hidden = false; $("gErr").textContent = res.code === "wrong_passcode" ? "That passcode didn't work." : (res.message || "The server refused."); pass = ""; return; }
       ls.set("who", who); ls.set("pass", pass);
-      server = res.cues; lastSync = Date.now(); $("gate").hidden = true;
+      server = res.cues; surtitlesSupported = Array.isArray(res.surtitles); serverLines = surtitlesSupported ? res.surtitles : [];
+      lastSync = Date.now(); $("gate").hidden = true;
       renderLinks(res.links);
       buildSegments(); render(); updateBar(); flush();
     } catch (e) { $("gErr").hidden = false; $("gErr").textContent = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection and try again."; }
@@ -892,10 +1142,12 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 
   // ------------------------------------------------------------ start
   if (drafts && Object.keys(drafts).length) editingKey = Object.keys(drafts)[0];
+  if (lineDrafts && Object.keys(lineDrafts).length) editingLineKey = Object.keys(lineDrafts)[0];
   buildSegments(); render(); updateBar();
+  loadSegmentMap().then(() => { buildSegments(); render(); });
   if (!who || !pass) showGate(); else { refresh().then(flush); }
   if (outbox.length) toast(`${outbox.length} unsent change${outbox.length > 1 ? "s" : ""} from last time: sending now.`);
-  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, refresh, flush };
+  window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, refresh, flush };
 })();
 </script>
 </body>

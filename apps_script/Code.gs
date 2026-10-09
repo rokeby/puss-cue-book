@@ -16,9 +16,12 @@
  * Setup: see Tools/CueBook/README.md.
  */
 
-var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes'];
+var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes', 'at', 'go'];
 var META = ['key', 'ord', 'version', 'cut', 'num', 'origin', 'director', 'after', 'updatedBy', 'updatedAt'];
 var CUE_COLUMNS = META.concat(FIELDS);
+var SURTITLE_FIELDS = ['segment', 'in', 'out', 'speaker', 'text', 'notes'];
+var SURTITLE_META = ['key', 'ord', 'version', 'cut', 'updatedBy', 'updatedAt'];
+var SURTITLE_COLUMNS = SURTITLE_META.concat(SURTITLE_FIELDS);
 var LOG_COLUMNS = ['at', 'who', 'client', 'op', 'key', 'field', 'before', 'after', 'version'];
 var MAX_TEXT = 5000;
 
@@ -47,6 +50,8 @@ function doPost(e) {
     try {
       if (req.action === 'save') return json_(save_(req));
       if (req.action === 'add') return json_(add_(req));
+      if (req.action === 'saveLine') return json_(saveLine_(req));
+      if (req.action === 'addLine') return json_(addLine_(req));
       if (req.action === 'seed') return json_(seed_(req, props));
     } finally {
       lock.releaseLock();
@@ -61,7 +66,9 @@ function doPost(e) {
 function list_() {
   var rows = readCues_().rows;
   rows.sort(function (a, b) { return a.ord - b.ord; });
-  return { ok: true, cues: rows, links: readLinks_(), serverTime: Date.now() };
+  var surtitles = readSurtitles_().rows;
+  surtitles.sort(function (a, b) { return a.ord - b.ord; });
+  return { ok: true, cues: rows, surtitles: surtitles, links: readLinks_(), serverTime: Date.now() };
 }
 
 // Optional "links" tab (columns: label, url): links shown on the page only after sign-in, so private addresses
@@ -105,6 +112,10 @@ function save_(req) {
   });
   if (conflicts.length) return { ok: false, code: 'conflict', conflicts: conflicts, cue: cur };
   if (!changes.length) return { ok: true, unchanged: true, cue: cur };
+  var proposed = Object.assign({}, cur);
+  changes.forEach(function (c) { proposed[c.field] = c.after; });
+  var timingError = validateCueTiming_(proposed);
+  if (timingError) return { ok: false, code: 'bad_request', message: timingError };
   var now = Date.now();
   changes.forEach(function (c) { cur[c.field] = c.after; });
   cur.version = Number(cur.version || 0) + 1;
@@ -136,10 +147,72 @@ function add_(req) {
   var cue = { key: key, ord: ord, version: 1, cut: false, num: '', origin: 'web', director: '', after: after ? after.key : '',
     updatedBy: who, updatedAt: now };
   FIELDS.forEach(function (f) { cue[f] = clean_((req.fields || {})[f], MAX_TEXT); });
+  var timingError = validateCueTiming_(cue);
+  if (timingError) return { ok: false, code: 'bad_request', message: timingError };
   var sh = table.sheet;
   sh.getRange(sh.getLastRow() + 1, 1, 1, CUE_COLUMNS.length).setValues([CUE_COLUMNS.map(function (c) { return cell_(cue[c]); })]);
   appendLog_([{ at: now, who: who, client: client, op: op, key: key, field: '_new', before: '', after: cue.after, version: 1 }]);
   return { ok: true, cue: cue };
+}
+
+function saveLine_(req) {
+  var who = clean_(req.who, 60), client = clean_(req.client, 60), op = clean_(req.op, 80);
+  if (op && opSeen_(op)) return { ok: true, duplicate: true, line: findLine_(req.key) };
+  var table = readSurtitles_();
+  var idx = table.index[req.key];
+  if (idx == null) return { ok: false, code: 'not_found', message: 'No surtitle ' + req.key };
+  var cur = table.rows[idx], patch = req.patch || {}, base = req.base || {};
+  var conflicts = [], changes = [];
+  Object.keys(patch).forEach(function (f) {
+    if (SURTITLE_FIELDS.indexOf(f) < 0 && f !== 'cut') return;
+    var next = f === 'cut' ? !!patch[f] : clean_(patch[f], MAX_TEXT);
+    var was = f === 'cut' ? !!cur[f] : String(cur[f] || '');
+    var expected = f === 'cut' ? !!base[f] : String(base[f] == null ? '' : base[f]);
+    if (was === next) return;
+    if (was !== expected) { conflicts.push({ field: f, theirs: was, yours: next, base: expected }); return; }
+    changes.push({ field: f, before: was, after: next });
+  });
+  if (conflicts.length) return { ok: false, code: 'conflict', conflicts: conflicts, line: cur };
+  if (!changes.length) return { ok: true, unchanged: true, line: cur };
+  var proposed = Object.assign({}, cur);
+  changes.forEach(function (c) { proposed[c.field] = c.after; });
+  var error = validateLine_(proposed);
+  if (error) return { ok: false, code: 'bad_request', message: error };
+  var now = Date.now();
+  changes.forEach(function (c) { cur[c.field] = c.after; });
+  cur.version = Number(cur.version || 0) + 1;
+  cur.updatedBy = who;
+  cur.updatedAt = now;
+  writeLine_(table.sheet, idx, cur);
+  appendLog_(changes.map(function (c) {
+    return { at: now, who: who, client: client, op: op, key: cur.key, field: 'sub:' + c.field, before: c.before, after: c.after, version: cur.version };
+  }));
+  return { ok: true, line: cur };
+}
+
+function addLine_(req) {
+  var who = clean_(req.who, 60), client = clean_(req.client, 60), op = clean_(req.op, 80);
+  if (op && opSeen_(op)) return { ok: true, duplicate: true, line: findLine_(clean_(req.key, 40)) };
+  var table = readSurtitles_(), key = clean_(req.key, 40);
+  if (!/^T[A-Z0-9]{4,12}$/.test(key) || table.index[key] != null) return { ok: false, code: 'bad_request', message: 'Bad new surtitle key' };
+  var after = table.index[req.after] != null ? table.rows[table.index[req.after]] : null;
+  var ord;
+  if (after) {
+    var sorted = table.rows.slice().sort(function (a, b) { return a.ord - b.ord; });
+    var i = sorted.indexOf(after);
+    ord = i + 1 < sorted.length ? (after.ord + sorted[i + 1].ord) / 2 : after.ord + 10;
+  } else {
+    ord = Number(req.ord) || (table.rows.length + 1) * 10;
+  }
+  var now = Date.now();
+  var line = { key: key, ord: ord, version: 1, cut: false, updatedBy: who, updatedAt: now };
+  SURTITLE_FIELDS.forEach(function (f) { line[f] = clean_((req.fields || {})[f], MAX_TEXT); });
+  var error = validateLine_(line);
+  if (error) return { ok: false, code: 'bad_request', message: error };
+  table.sheet.getRange(table.sheet.getLastRow() + 1, 1, 1, SURTITLE_COLUMNS.length)
+    .setValues([SURTITLE_COLUMNS.map(function (c) { return cell_(line[c]); })]);
+  appendLog_([{ at: now, who: who, client: client, op: op, key: key, field: 'sub:_new', before: '', after: line.segment, version: 1 }]);
+  return { ok: true, line: line };
 }
 
 /** One-off: load the cue list into an EMPTY cues sheet (refuses otherwise). */
@@ -184,6 +257,11 @@ function sheet_(name, columns) {
     sh = ss.insertSheet(name);
     sh.getRange(1, 1, 1, columns.length).setValues([columns]).setFontWeight('bold');
     sh.setFrozenRows(1);
+  } else {
+    var header = sh.getRange(1, 1, 1, columns.length).getValues()[0];
+    if (columns.some(function (column, i) { return header[i] !== column; })) {
+      sh.getRange(1, 1, 1, columns.length).setValues([columns]).setFontWeight('bold');
+    }
   }
   return sh;
 }
@@ -208,13 +286,41 @@ function readCues_() {
   return { sheet: sh, rows: rows, index: index };
 }
 
+function readSurtitles_() {
+  var sh = sheet_('surtitles', SURTITLE_COLUMNS);
+  var n = sh.getLastRow() - 1, rows = [], index = {};
+  if (n > 0) {
+    var values = sh.getRange(2, 1, n, SURTITLE_COLUMNS.length).getValues();
+    values.forEach(function (v, i) {
+      var o = toObj_(SURTITLE_COLUMNS, v);
+      o.ord = Number(o.ord) || 0;
+      o.version = Number(o.version) || 1;
+      o.cut = o.cut === true || o.cut === 'TRUE' || o.cut === 'true';
+      o.updatedAt = o.updatedAt ? Number(o.updatedAt) : '';
+      SURTITLE_FIELDS.concat(['key', 'updatedBy']).forEach(function (f) { o[f] = String(o[f] == null ? '' : o[f]); });
+      rows.push(o);
+      index[o.key] = i;
+    });
+  }
+  return { sheet: sh, rows: rows, index: index };
+}
+
 function findCue_(key) {
   var t = readCues_();
   return t.index[key] != null ? t.rows[t.index[key]] : null;
 }
 
+function findLine_(key) {
+  var t = readSurtitles_();
+  return t.index[key] != null ? t.rows[t.index[key]] : null;
+}
+
 function writeCue_(sh, idx, cue) {
   sh.getRange(idx + 2, 1, 1, CUE_COLUMNS.length).setValues([CUE_COLUMNS.map(function (c) { return cell_(cue[c]); })]);
+}
+
+function writeLine_(sh, idx, line) {
+  sh.getRange(idx + 2, 1, 1, SURTITLE_COLUMNS.length).setValues([SURTITLE_COLUMNS.map(function (c) { return cell_(line[c]); })]);
 }
 
 function appendLog_(entries) {
@@ -250,6 +356,40 @@ function cell_(v) {
 
 function clean_(v, max) {
   return String(v == null ? '' : v).replace(/\r\n/g, '\n').slice(0, max);
+}
+
+function parseTime_(text) {
+  var raw = String(text == null ? '' : text).trim();
+  var parts = raw.split(':');
+  if (!raw || parts.length < 1 || parts.length > 4) return null;
+  for (var i = 0; i < parts.length; i++) if (!/^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(parts[i].trim())) return null;
+  var v = parts.map(function (p) { return Number(p.trim()); });
+  if (parts.length === 4 && v[3] >= 25) return null;
+  if (parts.length === 1) return v[0];
+  if (parts.length === 2) return v[0] * 60 + v[1];
+  if (parts.length === 3) return v[0] * 3600 + v[1] * 60 + v[2];
+  return v[0] * 3600 + v[1] * 60 + v[2] + v[3] / 25;
+}
+
+function validateCueTiming_(cue) {
+  var at = String(cue.at || '').trim(), go = String(cue.go || '').trim();
+  if (at && parseTime_(at) == null) return 'At is not a valid segment-relative time';
+  if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS]"';
+  if (go && !at) return 'GO needs an At time';
+  return '';
+}
+
+function validateLine_(line) {
+  if (!String(line.segment || '').trim()) return 'A surtitle needs a segment';
+  var inSeconds = parseTime_(line.in);
+  if (inSeconds == null) return 'In is not a valid time';
+  var out = String(line.out || '').trim();
+  if (out) {
+    var outSeconds = parseTime_(out);
+    if (outSeconds == null) return 'Out is not a valid time';
+    if (outSeconds <= inSeconds) return 'Out must be after In';
+  }
+  return '';
 }
 
 function json_(o) {
