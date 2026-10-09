@@ -3,13 +3,13 @@
   "presets": {
     "full": {
       "label": "Full",
-      "fields": ["num", "key", "segment", "at", "klara", "gary", "cameron", "light", "soundTech", "soundCue", "videoCue", "action", "beats", "go", "pause", "notes", "director"],
+      "fields": ["num", "key", "segment", "at", "klara", "gary", "cameron", "light", "soundTech", "soundCue", "videoCue", "action", "beats", "go", "pause", "dogLine", "notes", "director"],
       "hide_empty": false,
       "columns": 1
     },
     "stage-manager": {
       "label": "Stage manager",
-      "fields": ["num", "segment", "light", "soundTech", "soundCue", "videoCue", "action", "go", "pause", "notes"],
+      "fields": ["num", "segment", "light", "soundTech", "soundCue", "videoCue", "action", "go", "pause", "dogLine", "notes"],
       "hide_empty": false,
       "truncate": {"notes": 60},
       "columns": 1
@@ -23,8 +23,8 @@
     },
     "gary": {
       "label": "Gary",
-      "fields": ["num", "segment", "gary", "action", "go"],
-      "relevance": ["gary"],
+      "fields": ["num", "segment", "gary", "action", "go", "dogLine"],
+      "relevance": ["gary", "dogAction", "dogMode", "treadmill"],
       "previous_speaker_context": true,
       "columns": 2
     },
@@ -46,6 +46,13 @@
       "fields": ["num", "segment", "soundTech", "soundCue", "go", "pause"],
       "relevance": ["soundTech", "soundCue", "go", "pause"],
       "columns": 2
+    },
+    "dog": {
+      "label": "Dog",
+      "fields": ["num", "segment", "dogLine", "at", "go", "action", "notes"],
+      "relevance": ["dogAction", "dogMode", "treadmill"],
+      "previous_speaker_context": true,
+      "columns": 1
     }
   }
 }

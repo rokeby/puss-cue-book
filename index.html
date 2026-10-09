@@ -129,6 +129,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .blankcue { color: var(--muted); font-style: italic; font-size: 14px }
 .timing { display: flex; flex-wrap: wrap; gap: 6px; font: 500 12px var(--mono); color: var(--muted) }
 .timing span { border: 1px solid var(--rule); border-radius: 6px; padding: 2px 7px }
+.dog-line { font-size: 13px; font-weight: 600; color: var(--ink); border-left: 3px solid var(--accent); padding-left: 9px }
+.dog-line .inherited { color: var(--muted); font-weight: 400 }
 .cue-own-still { display: block; width: min(240px, 100%); aspect-ratio: 16/9; object-fit: cover; border-radius: 7px; background: #0b0d0c; box-shadow: var(--shadow) }
 .surtitle .num strong { font-size: 14px }
 .clear-screen { color: var(--muted); font-style: italic }
@@ -139,6 +141,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .run-segment { display: flex; flex-direction: column; gap: 5px }
 .run-segment h2 { margin: 0 0 2px; font: 800 20px/1.1 var(--display); position: sticky; top: 0; z-index: 1; padding: 7px 0; background: var(--paper) }
 .run-cue { width: 100%; display: grid; grid-template-columns: minmax(86px, .7fr) minmax(120px, 2fr) minmax(70px, 1fr) auto; gap: 8px; align-items: center; text-align: left; border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 7px 9px }
+.run-dog { grid-column: 2 / -1; font-size: 12px; color: var(--ink) }
+.run-dog .inherited { color: var(--muted); font-weight: 400 }
 .run-cue.cut { opacity: .55; text-decoration: line-through }
 .run-id { font: 500 11px/1.25 var(--mono); color: var(--muted) }
 .run-id b { display: block; color: var(--ink); font-size: 13px }
@@ -184,8 +188,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px }
 .editor label { display: flex; flex-direction: column; gap: 3px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); min-width: 0 }
 .editor label.wide { grid-column: 1 / -1 }
-.editor textarea, .editor input { min-height: 38px; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
+.editor textarea, .editor input, .editor select { min-height: 38px; border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px 8px; font: 400 14px/1.45 var(--body); text-transform: none; letter-spacing: 0; color: var(--ink) }
 .editor textarea { resize: vertical }
+.dog-group { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 0; padding: 10px; border: 1px solid var(--rule); border-radius: 8px }
+.dog-group legend { padding: 0 5px; font: 700 13px var(--display); color: var(--accent) }
 .field-help { display: block; color: var(--muted); font: 400 12px/1.35 var(--body); letter-spacing: 0; text-transform: none; overflow-wrap: anywhere }
 .help-toggle { border: 0; background: transparent; color: var(--accent); padding: 0 3px; font-weight: 700; text-decoration: underline; text-underline-offset: 2px }
 .help-more { grid-column: 1 / -1; margin: -2px 0 2px; padding: 7px 9px; border-left: 3px solid var(--accent); color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
@@ -234,7 +240,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   .cue { grid-template-columns: 54px minmax(0,1fr) }
   .num { padding: 10px 6px }
   .line { grid-template-columns: minmax(0, 1fr); gap: 0 }
-  .editor, .conf .pair { grid-template-columns: minmax(0, 1fr) }
+  .editor, .conf .pair, .dog-group { grid-template-columns: minmax(0, 1fr) }
   .run-cue { grid-template-columns: minmax(66px, .65fr) minmax(0, 2fr); gap: 4px 7px }
   .run-depts, .run-marks { grid-column: 2 }
   .print-list.columns-2 { column-count: 1 }
@@ -331,15 +337,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     ["klara", "Klara speaks"], ["gary", "Gary speaks"], ["cameron", "Cameron speaks"],
     ["light", "Light"], ["soundTech", "Sound tech"], ["soundCue", "Sound cue"],
     ["action", "Action"], ["videoCue", "Video cue"], ["beats", "Beats"], ["notes", "Notes"],
-    ["at", "At (time in segment)"], ["go", "GO"], ["pause", "Pause possible here (ambience)"]
+    ["at", "At (time in segment)"], ["go", "GO"], ["pause", "Pause possible here (ambience)"],
+    ["dogAction", "Physical action"], ["dogMode", "GO1 mode"], ["treadmill", "Treadmill"]
   ];
   const FKEYS = FIELDS.map(f => f[0]);
   const LABEL = Object.fromEntries(FIELDS);
   const SPEAKERS = ["klara", "gary", "cameron"];
   const DEPTS = ["light", "soundTech", "soundCue", "action", "videoCue", "beats"];
+  const DOG_KEYS = ["dogAction", "dogMode", "treadmill"];
+  const DOG_MODES = { lying: "Lying down (damped)", standing: "Standing", walk_trot: "Walk / trot", run: "Run", stairs_climb: "Stairs / climb" };
   const DEPT_SHORT = { light: "Light", soundTech: "Sound tech", soundCue: "Sound", action: "Action", videoCue: "Video", beats: "Beats" };
-  const PRINT_LABEL = { num: "#", key: "Key", segment: "Segment", at: "At", klara: "Klara", gary: "Gary", cameron: "Cameron", light: "Light", soundTech: "Sound tech", soundCue: "Sound cue", videoCue: "Video cue", action: "Action", beats: "Beats", go: "GO", pause: "Pause", notes: "Notes", director: "Director notes" };
-  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["pause", "Pause possible"], ["director", "Director notes"], ["cut", "Cut"]];
+  const PRINT_LABEL = { num: "#", key: "Key", segment: "Segment", at: "At", klara: "Klara", gary: "Gary", cameron: "Cameron", light: "Light", soundTech: "Sound tech", soundCue: "Sound cue", videoCue: "Video cue", action: "Action", beats: "Beats", go: "GO", pause: "Pause", dogLine: "Dog", notes: "Notes", director: "Director notes" };
+  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["pause", "Pause possible"], ["dogAction", "Dog action"], ["dogMode", "Dog mode"], ["treadmill", "Treadmill"], ["director", "Director notes"], ["cut", "Cut"]];
   const SUB_FIELDS = [["in", "In"], ["out", "Out"], ["speaker", "Speaker"], ["text", "Text"], ["notes", "Notes"]];
   const SUB_KEYS = ["segment"].concat(SUB_FIELDS.map(f => f[0]));
   const SUB_LABEL = Object.fromEntries([["segment", "Segment"]].concat(SUB_FIELDS));
@@ -441,7 +450,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   const client = ls.get("client", null) || (() => { const c = uid().slice(0, 12); ls.set("client", c); return c; })();
   const undoKey = "undo." + client;
   let server = [];                 // cues as the server last told us
-  let serverLines = [], surtitlesSupported = null, moveSupported = false;
+  let serverLines = [], surtitlesSupported = null, moveSupported = false, dogSupported = false;
   let outbox = ls.get("outbox", []);   // writes not yet acknowledged; survives reloads and closed tabs
   let conflicts = ls.get("conflicts", {});  // key -> {op, items:[{field, theirs, yours, base}]}
   let drafts = ls.get("drafts", {});        // key -> {base, draft} while a cue is open
@@ -552,6 +561,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       server = res.cues; lastSync = Date.now(); lastError = "";
       surtitlesSupported = Array.isArray(res.surtitles);
       moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
+      dogSupported = Array.isArray(res.fields) && DOG_KEYS.every(field => res.fields.includes(field));
       serverLines = surtitlesSupported ? res.surtitles : [];
       renderLinks(res.links);
       buildSegments();
@@ -659,7 +669,14 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   // ------------------------------------------------------------ segments and filters
   let cues = [];
   function buildSegments() {
-    cues = view();
+    let mode = "", treadmill = "";
+    cues = view().map(source => {
+      const cue = Object.assign({}, source), directMode = String(cue.dogMode || "").trim(), directTreadmill = String(cue.treadmill || "").trim();
+      cue._dogMode = directMode || mode; cue._treadmill = directTreadmill || treadmill;
+      cue._dogModeInherited = !!cue._dogMode && !directMode; cue._treadmillInherited = !!cue._treadmill && !directTreadmill;
+      mode = directMode || mode; treadmill = directTreadmill || treadmill;
+      return cue;
+    });
     segments = [];
     let seg = { label: "Prologue", cues: [] }; segments.push(seg);
     for (const c of cues) {
@@ -679,6 +696,19 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     });
     if (current >= segments.length) current = Math.max(0, segments.length - 1);
     if (printPresets) populatePrintControls();
+  }
+  function dogParts(cue) {
+    return [
+      cue.dogAction && { text: cue.dogAction, inherited: false },
+      cue._dogMode && { text: DOG_MODES[cue._dogMode] || cue._dogMode, inherited: cue._dogModeInherited },
+      cue._treadmill && { text: "treadmill " + cue._treadmill, inherited: cue._treadmillInherited }
+    ].filter(Boolean);
+  }
+  function appendDogLine(host, cue, cls = "dog-line") {
+    const parts = dogParts(cue); if (!parts.length) return false;
+    const line = el("div", cls); line.append(document.createTextNode("DOG: "));
+    parts.forEach((part, index) => { if (index) line.append(document.createTextNode(" \u00b7 ")); line.append(el("span", part.inherited ? "inherited" : null, part.text)); });
+    host.append(line); return true;
   }
   function matches(c) {
     if (filter === "klara" && !c.klara) return false;
@@ -845,6 +875,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (c.notes) { any = true; const n = el("div", "note"); n.append(el("b", null, "Note: "), document.createTextNode(c.notes)); body.append(n); }
     if (c.director) { any = true; const n = el("div", "note"); n.append(el("b", null, "Gary (director): "), document.createTextNode(c.director)); body.append(n); }
     if (c.pause === "yes") { any = true; body.append(el("span", "pill", "PAUSE POSSIBLE")); }
+    if (appendDogLine(body, c)) any = true;
     if (c.at || c.go) {
       any = true; const timing = el("div", "timing");
       if (c.at) timing.append(el("span", null, "At " + c.at));
@@ -948,7 +979,10 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       hint: "An ambience moment where a breath could go.",
       title: "Pause possible marks an ambience moment where a breath could go.",
       more: "Tick this when the moment could hold a little longer for a live breath. It is a planning note, not a command that stops the show."
-    }
+    },
+    dogAction: { hint: "What the dog physically does, in plain words.", title: "Write the live dog's physical stage direction in plain words.", more: "Examples: trotting, crouching, still, looking up, climbing. This belongs to this cue only; it is not carried forward." },
+    dogMode: { hint: "Handheld-remote mode for the operator. Blank means no change.", title: "This is an operator direction, not a mode value read from GO1 telemetry.", more: "The measured telemetry mode stayed 0 in standing and movement states, so choose the named remote mode Gary should put the dog in. A blank inherits the last stated mode." },
+    treadmill: { hint: "On or off; blank means no change.", title: "Treadmill state is part of the dog stage direction.", more: "Choose on or off only when it changes. A blank inherits the last stated treadmill state." }
   };
 
   function addFieldHelp(label, field, control, key) {
@@ -971,6 +1005,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (moved.length) f.append(el("div", "warn", `${cur.updatedBy || "Someone"} changed ${moved.map(k => LABEL[k]).join(", ")} since you opened this cue. If you also changed those, you'll be asked which to keep when you save.`));
     if (d.error) f.append(el("div", "warn", d.error));
     for (const [k, l] of FIELDS) {
+      if (DOG_KEYS.includes(k)) continue;
       // The old script drops at/go without saying so (its save skips unknown fields), so offer them only once
       // the updated script answers (it also returns the surtitles list).
       if ((k === "at" || k === "go" || k === "pause") && !surtitlesSupported) continue;
@@ -993,6 +1028,17 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       if (k === "go") field.placeholder = "e.g. 20 HOLD, 21 PASS or 22 BREATH";
       field.oninput = () => { d.draft[k] = field.value; delete d.error; saveDrafts(); updateBar(); };
       lab.append(field); if (FIELD_HELP[k]) addFieldHelp(lab, k, field, c.key); f.append(lab);
+    }
+    if (dogSupported) {
+      const group = el("fieldset", "dog-group"), legend = el("legend", null, "Dog"); group.append(legend);
+      const actionLabel = el("label", "wide", LABEL.dogAction), action = el("textarea"); action.rows = 2; action.name = "dogAction"; action.value = d.draft.dogAction || "";
+      action.oninput = () => { d.draft.dogAction = action.value; delete d.error; saveDrafts(); updateBar(); }; actionLabel.append(action); addFieldHelp(actionLabel, "dogAction", action, c.key); group.append(actionLabel);
+      for (const [key, options] of [["dogMode", [["", "\u2014 (unspecified)"], ...Object.entries(DOG_MODES)]], ["treadmill", [["", "\u2014 (no change)"], ["on", "On"], ["off", "Off"]]]]) {
+        const label = el("label", null, LABEL[key]), select = el("select"); select.name = key;
+        options.forEach(([value, text]) => { const option = el("option", null, text); option.value = value; select.append(option); }); select.value = d.draft[key] || "";
+        select.onchange = () => { d.draft[key] = select.value; delete d.error; saveDrafts(); updateBar(); }; label.append(select); addFieldHelp(label, key, select, c.key); group.append(label);
+      }
+      f.append(group);
     }
     if (c.director) f.append(el("div", "ro wide", "Gary's director note (edited in the project): " + c.director));
     const row = el("div", "row");
@@ -1175,6 +1221,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         if (cue.pause === "yes") marks.append(el("span", null, "PAUSE POSSIBLE"));
         if (cue.go) marks.append(el("span", null, "GO " + cue.go));
         row.append(id, speech, departments, marks);
+        appendDogLine(row, cue, "run-dog");
         row.onclick = () => { runningOrder = false; ls.set("runningOrder", false); syncRunningOrder(); render(); jumpTo(cue.key); };
         group.append(row);
       }
@@ -1249,6 +1296,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
           if (["num", "key", "segment"].includes(field)) continue;
           let value = cue[field] || "";
           if (field === "pause") value = value === "yes" ? "PAUSE POSSIBLE" : "";
+          if (field === "dogLine") value = dogParts(cue).length ? "DOG: " + dogParts(cue).map(part => part.text).join(" \u00b7 ") : "";
           const limit = preset.truncate && preset.truncate[field]; if (limit) value = shortText(value, limit);
           if (value) { const line = el("span", `print-field field-${field}`); line.append(el("b", null, PRINT_LABEL[field] + " "), document.createTextNode(value)); row.append(line); }
         }
@@ -1557,6 +1605,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       ls.set("who", who); ls.set("pass", pass);
       server = res.cues; surtitlesSupported = Array.isArray(res.surtitles); serverLines = surtitlesSupported ? res.surtitles : [];
       moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
+      dogSupported = Array.isArray(res.fields) && DOG_KEYS.every(field => res.fields.includes(field));
       lastSync = Date.now(); $("gate").hidden = true;
       renderLinks(res.links);
       buildSegments(); render(); updateBar(); flush();

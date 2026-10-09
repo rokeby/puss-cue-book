@@ -17,7 +17,8 @@
  */
 
 // pause: 'yes' marks an ambience moment where a pause is possible (Gary 9 Oct; breath pause design 0d2ae74).
-var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes', 'at', 'go', 'pause'];
+var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes', 'at', 'go', 'pause', 'dogAction', 'dogMode', 'treadmill'];
+var DOG_MODES = ['', 'lying', 'standing', 'walk_trot', 'run', 'stairs_climb'];
 var META = ['key', 'ord', 'version', 'cut', 'num', 'origin', 'director', 'after', 'updatedBy', 'updatedAt'];
 var CUE_COLUMNS = META.concat(FIELDS);
 var SURTITLE_FIELDS = ['segment', 'in', 'out', 'speaker', 'text', 'notes'];
@@ -70,7 +71,7 @@ function list_() {
   rows.sort(function (a, b) { return a.ord - b.ord; });
   var surtitles = readSurtitles_().rows;
   surtitles.sort(function (a, b) { return a.ord - b.ord; });
-  return { ok: true, cues: rows, surtitles: surtitles, links: readLinks_(), actions: ['move'], serverTime: Date.now() };
+  return { ok: true, cues: rows, surtitles: surtitles, links: readLinks_(), actions: ['move'], fields: FIELDS, serverTime: Date.now() };
 }
 
 // Optional "links" tab (columns: label, url): links shown on the page only after sign-in, so private addresses
@@ -426,6 +427,8 @@ function validateCueTiming_(cue) {
   if (at && parseTime_(at) == null) return 'At is not a valid segment-relative time';
   if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS|BREATH))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS|BREATH]"';
   if (cue.pause != null && ['', 'yes'].indexOf(String(cue.pause)) < 0) return 'pause must be yes or empty';
+  if (DOG_MODES.indexOf(String(cue.dogMode || '')) < 0) return 'dogMode is not a supported operator direction';
+  if (['', 'on', 'off'].indexOf(String(cue.treadmill || '')) < 0) return 'treadmill must be on, off or empty';
   if (go && !at) return 'GO needs an At time';
   return '';
 }
