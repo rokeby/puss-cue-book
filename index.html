@@ -81,6 +81,11 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .stepper { display: flex; gap: 8px; flex-wrap: wrap }
 .stepper button { border: 1px solid var(--rule); background: var(--sheet); border-radius: 8px; padding: 7px 14px }
 .stepper button:disabled { opacity: .4; cursor: default }
+.segtools { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-top: 12px }
+.nameform { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 440px }
+.nameform label { font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted) }
+.nameform input { border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 7px 10px; font-size: 15px }
+.nameform .chips, .rowb { display: flex; flex-wrap: wrap; gap: 6px }
 
 .cues { display: flex; flex-direction: column; gap: 10px; max-width: 1100px }
 .empty-state { border: 1px dashed var(--rule); border-radius: 12px; padding: 28px; color: var(--muted); max-width: 640px }
@@ -453,7 +458,65 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const st = el("div", "stepper");
     const prev = el("button", null, "← Previous"); prev.disabled = current === 0; prev.onclick = () => go(current - 1);
     const next = el("button", null, "Next →"); next.disabled = current >= segments.length - 1; next.onclick = () => go(current + 1);
-    st.append(prev, next); side.append(st); h.append(fig, side);
+    st.append(prev, next); side.append(st);
+    // Segment tools. A segment is the run of cues from one cue with a Video cue to the next; its name IS that Video cue.
+    const tools = el("div", "segtools");
+    const first = s.cues[0];
+    const rename = el("button", "lnk", "Rename");
+    rename.onclick = () => nameForm(tools, "Segment name", (first.videoCue || "").trim() ? first.videoCue : "", name => setVideoCue(first, name), "Rename");
+    const addSeg = el("button", "lnk", "+ New segment after this one");
+    addSeg.onclick = () => nameForm(tools, "New segment name", "", name => {
+      const key = "W" + Date.now().toString(36).toUpperCase().slice(-7);
+      queue({ action: "add", key, after: s.cues[s.cues.length - 1].key, fields: { videoCue: name } });
+      const i = segments.findIndex(x => x.cues.some(c => c.key === key)); if (i >= 0) go(i);
+      toast(`Added “${name}”. Add its cues with “Add cue after”.`);
+    }, "Add segment");
+    tools.append(rename, addSeg);
+    if (current > 0 && (first.videoCue || "").trim()) {
+      const merge = el("button", "lnk", "Merge into the previous segment");
+      merge.onclick = () => {
+        tools.textContent = "";
+        tools.append(el("span", "ro", `Join “${s.title}” onto “${segments[current - 1].title}”? Its cues are kept; only the break is removed.`));
+        const yes = el("button", "btn", "Merge"); yes.onclick = () => { const to = current - 1; setVideoCue(first, ""); go(to); };
+        const no = el("button", "btn", "Cancel"); no.onclick = () => render();
+        tools.append(yes, no);
+      };
+      tools.append(merge);
+    }
+    side.append(tools);
+    h.append(fig, side);
+  }
+
+  function setVideoCue(c, name) {
+    const cur = cues.find(x => x.key === c.key) || c;
+    if ((cur.videoCue || "") === name) return;
+    queue({ action: "save", key: c.key, patch: { videoCue: name }, base: { videoCue: cur.videoCue || "" } });
+  }
+
+  // Suggested names: the next Passage and Scene numbers, plus the usual kinds.
+  function segmentSuggestions() {
+    const max = re => Math.max(0, ...segments.map(s => Number((s.label.match(re) || [])[1]) || 0));
+    const p = max(/^passage\s*(\d+)/i), sc = max(/^s(?:cene)?\s*(\d+)/i);
+    return [`Passage ${p + 1}`, `Scene ${sc + 1}: `, "Transition", "Start", "Ending", "Interval"];
+  }
+
+  // An inline name box (the viewer can't use prompt()).
+  function nameForm(host, label, initial, onOk, okText) {
+    host.textContent = "";
+    const f = el("form", "nameform");
+    const id = "nf-" + Date.now();
+    const lab = el("label", null, label); lab.htmlFor = id;
+    const inp = el("input"); inp.id = id; inp.value = initial; inp.setAttribute("list", id + "-l"); inp.autocomplete = "off";
+    const dl = el("datalist"); dl.id = id + "-l"; segmentSuggestions().forEach(v => { const o = el("option"); o.value = v; dl.append(o); });
+    const chips = el("div", "chips");
+    segmentSuggestions().forEach(v => { const b = el("button", "fchip", v.trim()); b.type = "button"; b.onclick = () => { inp.value = v; inp.focus(); }; chips.append(b); });
+    const ok = el("button", "btn primary", okText); ok.type = "submit";
+    const no = el("button", "btn", "Cancel"); no.type = "button"; no.onclick = () => render();
+    f.onsubmit = ev => { ev.preventDefault(); const v = inp.value.trim(); if (!v) { inp.focus(); return; } onOk(v); };
+    const row = el("div", "rowb"); row.append(ok, no);
+    f.append(lab, inp, dl, chips, row);
+    host.append(f);
+    inp.focus();
   }
 
   function cueView(c) {
@@ -480,7 +543,18 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const acts = el("div", "acts");
     const e = el("button", "lnk", drafts[c.key] ? "Continue editing" : "Edit"); e.onclick = ev => { ev.stopPropagation(); startEdit(c); };
     const a = el("button", "lnk", "Add cue after"); a.onclick = ev => { ev.stopPropagation(); addAfter(c); };
-    acts.append(e, a); meta.append(acts); body.append(meta);
+    acts.append(e, a);
+    const seg = segments[current];
+    if (seg && seg.cues[0] && seg.cues[0].key !== c.key && !(c.videoCue || "").trim()) {
+      const split = el("button", "lnk", "Start new segment here");
+      split.onclick = ev => {
+        ev.stopPropagation();
+        const host = el("div"); body.append(host);
+        nameForm(host, `New segment starting at ${c.key}`, "", name => { setVideoCue(c, name); const i = segments.findIndex(x => x.cues[0] && x.cues[0].key === c.key); if (i >= 0) go(i); }, "Start segment");
+      };
+      acts.append(split);
+    }
+    meta.append(acts); body.append(meta);
     card.style.cursor = "pointer";
     card.onclick = ev => { if (ev.target.closest("button, .conf") || String(getSelection())) return; startEdit(c); };
     return card;
