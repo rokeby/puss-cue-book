@@ -248,7 +248,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     [/^passage 2\b/i, "P02", "8 Oct"], [/^scene 2\b/i, "S2", "8 Oct"],
     [/^passage 3\b/i, "P03", "8 Oct"], [/^scene 3\b/i, "S3", "8 Oct"],
     [/^passage 4\b/i, "P04", "7 Oct"], [/^scene 4\b/i, "S4", "8 Oct"],
-    [/^passage 5\b/i, "P05", "7 Oct"], [/^passage 6\b/i, "P06", "7 Oct"]
+    [/^passage 5\b/i, "P05", "7 Oct"], [/^passage 6\b/i, "P06", "7 Oct"], [/^scene 6\b/i, "S6", "7 Oct"]
   ];
   const POLL_MS = 20000;
 
@@ -639,6 +639,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const out = $("upResult");
     let data;
     try { data = JSON.parse(await file.text()); } catch { out.textContent = "That file isn't a Cue Book backup (it isn't JSON)."; return; }
+    if (data && data.app === "puss-cue-book" && data.kind === "changes") return previewChanges(data, out);
     if (!data || data.app !== "puss-cue-book" || !Array.isArray(data.cues)) { out.textContent = "That file isn't a Cue Book backup."; return; }
     if (!server.length) {                              // first load: the shared list is empty
       out.textContent = "";
@@ -688,6 +689,46 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const no = el("button", "btn", "Cancel"); no.onclick = () => { out.textContent = "Nothing was changed."; };
     row.append(go_, no); out.append(row);
   };
+
+  // Changes from the project (the master Sheet pulls and Gary's notes), made by cue_sync tocuebook. Each change carries
+  // the value the Cue Book was last known to hold: if someone has changed that field on the page since, the server
+  // returns a conflict and both versions are shown. Nothing applies until the person confirms.
+  function previewChanges(data, out) {
+    const now = new Map(view().map(c => [c.key, c]));
+    const byKey = new Map();
+    for (const ch of data.changes || []) {
+      if (!FKEYS.includes(ch.field) && ch.field !== "cut") continue;
+      const op = byKey.get(ch.key) || { action: "save", key: ch.key, patch: {}, base: {} };
+      op.patch[ch.field] = ch.to; op.base[ch.field] = ch.from; byKey.set(ch.key, op);
+    }
+    const ops = [], lines = [];
+    let already = 0, missing = 0;
+    for (const op of byKey.values()) {
+      const c = now.get(op.key);
+      if (!c) { missing++; continue; }
+      const fields = Object.keys(op.patch).filter(f => (f === "cut" ? !!c.cut : (c[f] || "")) !== op.patch[f]);
+      if (!fields.length) { already++; continue; }
+      fields.forEach(f => { if (f !== "cut" && (c[f] || "") !== (op.base[f] || "")) op.edited = true; });
+      ops.push(op);
+      lines.push(`${op.key}: ${fields.map(f => f === "cut" ? (op.patch.cut ? "mark as cut" : "restore from cut") : `${LABEL[f]} → “${trim(op.patch[f]) || "(empty)"}”`).join("; ")}` + (op.edited ? " (also changed on this page: you'll choose which to keep)" : ""));
+    }
+    for (const a of data.adds || []) {
+      if (now.has(a.key)) { already++; continue; }
+      ops.push({ action: "add", key: a.key, after: a.after, fields: a.fields });
+      const what = FKEYS.filter(f => a.fields[f]).map(f => `${LABEL[f]}: “${trim(a.fields[f])}”`).join("; ");
+      lines.push(`New cue after ${a.after || "the start"}: ${what}`);
+    }
+    out.textContent = "";
+    const when = data.created ? new Date(data.created).toLocaleString() : "an unknown time";
+    if (!ops.length) { out.textContent = `Changes from the project (${when}): the Cue Book already has all of them.`; return; }
+    out.append(el("div", null, `Changes from the project (${when}): ${ops.length} to apply` + (already ? `, ${already} already here` : "") + (missing ? `, ${missing} for cues not in the Cue Book (skipped)` : "") + "."));
+    const ul = el("ul"); lines.slice(0, 60).forEach(l => ul.append(el("li", null, l))); if (lines.length > 60) ul.append(el("li", null, `…and ${lines.length - 60} more`)); out.append(ul);
+    const row = el("div", "rowb");
+    const yes = el("button", "btn primary", `Apply ${ops.length} change${ops.length === 1 ? "" : "s"}`);
+    yes.onclick = () => { ops.forEach(o => { delete o.edited; queue(o); }); out.textContent = `Applying ${ops.length} change${ops.length === 1 ? "" : "s"}. Watch the bar above until it says All changes saved.`; };
+    const no = el("button", "btn", "Cancel"); no.onclick = () => { out.textContent = "Nothing was changed."; };
+    row.append(yes, no); out.append(row);
+  }
 
   // ------------------------------------------------------------ chrome
   let toastT;
