@@ -16,7 +16,8 @@
  * Setup: see Tools/CueBook/README.md.
  */
 
-var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes', 'at', 'go'];
+// pause: 'yes' marks an ambience moment where a pause is possible (Gary 9 Oct; breath pause design 0d2ae74).
+var FIELDS = ['klara', 'gary', 'cameron', 'light', 'soundTech', 'soundCue', 'action', 'videoCue', 'beats', 'notes', 'at', 'go', 'pause'];
 var META = ['key', 'ord', 'version', 'cut', 'num', 'origin', 'director', 'after', 'updatedBy', 'updatedAt'];
 var CUE_COLUMNS = META.concat(FIELDS);
 var SURTITLE_FIELDS = ['segment', 'in', 'out', 'speaker', 'text', 'notes'];
@@ -374,7 +375,8 @@ function parseTime_(text) {
 function validateCueTiming_(cue) {
   var at = String(cue.at || '').trim(), go = String(cue.go || '').trim();
   if (at && parseTime_(at) == null) return 'At is not a valid segment-relative time';
-  if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS]"';
+  if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS|BREATH))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS|BREATH]"';
+  if (cue.pause != null && ['', 'yes'].indexOf(String(cue.pause)) < 0) return 'pause must be yes or empty';
   if (go && !at) return 'GO needs an At time';
   return '';
 }

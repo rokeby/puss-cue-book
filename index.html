@@ -210,6 +210,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       <button class="fchip" data-f="sound" aria-pressed="false">Sound</button>
       <button class="fchip" data-f="light" aria-pressed="false">Light</button>
       <button class="fchip" data-f="notes" aria-pressed="false">Has notes</button>
+      <button class="fchip" data-f="pause" aria-pressed="false">Pause points</button>
     </div>
     <input id="q" class="search" type="search" placeholder="Search the script" aria-label="Search the script">
     <span id="links" class="links"></span>
@@ -253,14 +254,14 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     ["klara", "Klara speaks"], ["gary", "Gary speaks"], ["cameron", "Cameron speaks"],
     ["light", "Light"], ["soundTech", "Sound tech"], ["soundCue", "Sound cue"],
     ["action", "Action"], ["videoCue", "Video cue"], ["beats", "Beats"], ["notes", "Notes"],
-    ["at", "At (time in segment)"], ["go", "GO"]
+    ["at", "At (time in segment)"], ["go", "GO"], ["pause", "Pause possible here (ambience)"]
   ];
   const FKEYS = FIELDS.map(f => f[0]);
   const LABEL = Object.fromEntries(FIELDS);
   const SPEAKERS = ["klara", "gary", "cameron"];
   const DEPTS = ["light", "soundTech", "soundCue", "action", "videoCue", "beats"];
   const DEPT_SHORT = { light: "Light", soundTech: "Sound tech", soundCue: "Sound", action: "Action", videoCue: "Video", beats: "Beats" };
-  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["director", "Director notes"], ["cut", "Cut"]];
+  const CSV_COLS = [["key", "Key"], ["num", "#"], ["light", "Light"], ["soundTech", "Sound tech"], ["action", "Action"], ["soundCue", "Sound cue"], ["videoCue", "Video Cue"], ["klara", "Speaker: Klara"], ["gary", "Speaker: Gary"], ["cameron", "Speaker: Cameron"], ["beats", "Beats"], ["notes", "Notes"], ["at", "At"], ["go", "GO"], ["pause", "Pause possible"], ["director", "Director notes"], ["cut", "Cut"]];
   const SUB_FIELDS = [["in", "In"], ["out", "Out"], ["speaker", "Speaker"], ["text", "Text"], ["notes", "Notes"]];
   const SUB_KEYS = ["segment"].concat(SUB_FIELDS.map(f => f[0]));
   const SUB_LABEL = Object.fromEntries([["segment", "Segment"]].concat(SUB_FIELDS));
@@ -295,7 +296,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   function cueTimingError(cue) {
     const at = String(cue.at || "").trim(), go = String(cue.go || "").trim();
     if (at && parseTime(at) == null) return "At must be seconds, m:ss.s, h:mm:ss.s, or hh:mm:ss:ff (ff below 25).";
-    if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS]" (uppercase).';
+    if (go && !/^[0-9]+(?:\.[0-9]+)?(?:\s+(?:HOLD|PASS|BREATH))?$/.test(go)) return 'GO must be "<number> [HOLD|PASS|BREATH]" (uppercase).';
     if (go && !at) return "GO needs an At time.";
     return "";
   }
@@ -510,6 +511,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (filter === "sound" && !c.soundTech && !c.soundCue) return false;
     if (filter === "light" && !c.light) return false;
     if (filter === "notes" && !c.notes && !c.director) return false;
+    if (filter === "pause" && c.pause !== "yes") return false;
     if (query && !(FKEYS.map(k => c[k] || "").join(" ") + " " + (c.director || "") + " " + c.key).toLowerCase().includes(query)) return false;
     return true;
   }
@@ -666,6 +668,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (dz.childNodes.length) body.append(dz);
     if (c.notes) { any = true; const n = el("div", "note"); n.append(el("b", null, "Note: "), document.createTextNode(c.notes)); body.append(n); }
     if (c.director) { any = true; const n = el("div", "note"); n.append(el("b", null, "Gary (director): "), document.createTextNode(c.director)); body.append(n); }
+    if (c.pause === "yes") { any = true; body.append(el("span", "pill", "PAUSE POSSIBLE")); }
     if (c.at || c.go) {
       any = true; const timing = el("div", "timing");
       if (c.at) timing.append(el("span", null, "At " + c.at));
@@ -743,13 +746,23 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     for (const [k, l] of FIELDS) {
       // The old script drops at/go without saying so (its save skips unknown fields), so offer them only once
       // the updated script answers (it also returns the surtitles list).
-      if ((k === "at" || k === "go") && !surtitlesSupported) continue;
+      if ((k === "at" || k === "go" || k === "pause") && !surtitlesSupported) continue;
+      if (k === "pause") {
+        // A tick box: "yes" or empty. An ambience moment where Puss could stop (breath pause, design 0d2ae74).
+        const lab = el("label", "wide check");
+        const box = el("input"); box.type = "checkbox"; box.id = `f-${c.key}-pause`; box.name = "pause";
+        box.checked = (d.draft.pause || "") === "yes";
+        box.onchange = () => { d.draft.pause = box.checked ? "yes" : ""; delete d.error; saveDrafts(); updateBar(); };
+        lab.append(box, document.createTextNode(" " + l));
+        f.append(lab);
+        continue;
+      }
       const lab = el("label", SPEAKERS.includes(k) || k === "notes" ? "wide" : null, l);
       const field = (k === "at" || k === "go") ? el("input") : el("textarea");
       field.id = `f-${c.key}-${k}`; field.name = k; field.value = d.draft[k] ?? "";
       if (field.tagName === "TEXTAREA") field.rows = SPEAKERS.includes(k) ? 3 : 2;
       if (k === "at") field.placeholder = "1:14.5";
-      if (k === "go") field.placeholder = "20 HOLD";
+      if (k === "go") field.placeholder = "20 HOLD, 21 PASS or 22 BREATH";
       field.oninput = () => { d.draft[k] = field.value; delete d.error; saveDrafts(); updateBar(); };
       lab.append(field); f.append(lab);
     }
