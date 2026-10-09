@@ -278,7 +278,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 
   // ------------------------------------------------------------ server
   async function call(req) {
-    const api = window.CUEBOOK_API;
+    // config.js can override (the test harness does); the built-in address keeps the page working if that file fails to load.
+    const api = window.CUEBOOK_API || "https://script.google.com/macros/s/AKfycbweMWcj98w9d8m4EU2OaNlhatMoeTLRmvPefA-HbEMnU1C_AH5HIAK3JM950S-4-r1MHQ/exec";
     if (!api) throw Object.assign(new Error("No server address set in config.js"), { code: "config" });
     if (typeof api === "function") return api(Object.assign({ pass }, req));     // test harness
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 30000);
