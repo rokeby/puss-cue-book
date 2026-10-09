@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "closing_key": "Closing",
+  "overrides": {
+    "Curtain opening to fully lit stage/passage": "Opening",
+    "Ending": "Closing"
+  },
+  "known_segments": [
+    "Prologue",
+    "Curtain opening to fully lit stage/passage",
+    "Passage 1",
+    "S1 Animals",
+    "Transition",
+    "Passage 2",
+    "Scene 2: Shrine",
+    "Transition",
+    "Passage 3",
+    "Scene 3",
+    "Transition",
+    "Passage 4",
+    "Scene 4",
+    "Transition",
+    "Passage 5",
+    "Scene 5: Mountains",
+    "Passage 6",
+    "Scene 6: Void",
+    "Ending"
+  ]
+}

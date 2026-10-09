@@ -125,6 +125,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .blankcue { color: var(--muted); font-style: italic; font-size: 14px }
 .timing { display: flex; flex-wrap: wrap; gap: 6px; font: 500 12px var(--mono); color: var(--muted) }
 .timing span { border: 1px solid var(--rule); border-radius: 6px; padding: 2px 7px }
+.cue-own-still { display: block; width: min(240px, 100%); aspect-ratio: 16/9; object-fit: cover; border-radius: 7px; background: #0b0d0c; box-shadow: var(--shadow) }
 .surtitle .num strong { font-size: 14px }
 .clear-screen { color: var(--muted); font-style: italic }
 
@@ -309,18 +310,42 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     }
     return ""; // Empty Text with an In is deliberately valid: it clears the screen.
   }
-  let segmentMap = {};
+  let segmentMap = { closing_key: "Closing", overrides: {} }, stillsManifest = null;
   function acceptSegmentMap(data) {
-    const source = data && (data.segments || data);
-    if (Array.isArray(source)) source.forEach(x => { if (x && (x.label || x.name) && (x.key || x.id)) segmentMap[x.label || x.name] = x.key || x.id; });
-    else if (source && typeof source === "object") Object.entries(source).forEach(([label, value]) => { if (typeof value === "string") segmentMap[label] = value; });
+    if (!data || typeof data !== "object") return;
+    segmentMap = { closing_key: typeof data.closing_key === "string" ? data.closing_key : "Closing",
+      overrides: data.overrides && typeof data.overrides === "object" ? data.overrides : {} };
   }
   async function loadSegmentMap() {
     for (const path of ["segment_map.json", "../segment_map.json"]) {
       try { const response = await fetch(path, { cache: "no-store" }); if (response.ok) { acceptSegmentMap(await response.json()); break; } } catch {}
     }
   }
-  const segmentKey = label => segmentMap[label] || label;
+  async function loadStillsManifest() {
+    try { const response = await fetch("stills.json", { cache: "no-store" }); if (response.ok) stillsManifest = await response.json(); } catch {}
+  }
+  const normalName = value => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+  function mapSegmentLabels(labels) {
+    const overrides = Object.fromEntries(Object.entries(segmentMap.overrides || {}).map(([key, value]) => [normalName(key), value]));
+    let transition = 0;
+    return labels.map(label => {
+      const name = normalName(label), isTransition = /^transition\b/.test(name);
+      if (isTransition) transition++;
+      const occurrence = isTransition ? `transition#${transition}` : "";
+      if (occurrence && typeof overrides[occurrence] === "string") return overrides[occurrence];
+      if (typeof overrides[name] === "string") return overrides[name];
+      let match = name.match(/^passage\s+(\d+)\b/); if (match) return `P${String(Number(match[1])).padStart(2, "0")}`;
+      match = name.match(/^(?:scene\s*|s)(\d+)\b/); if (match) return `S${Number(match[1])}`;
+      if (isTransition) return `I${transition}`;
+      if (/^curtain opening\b/.test(name)) return "Opening";
+      if (/^ending\b/.test(name)) return segmentMap.closing_key || "Closing";
+      return null;
+    });
+  }
+  function fallbackStill(label) {
+    const match = STILLS.find(([pattern]) => pattern.test(label));
+    return match ? { id: match[1], date: match[2], file: `stills/${match[1]}.jpg` } : null;
+  }
 
   // ------------------------------------------------------------ state
   let who = ls.get("who", ""), pass = ls.get("pass", "");
@@ -467,13 +492,14 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       seg.cues.push(c);
     }
     if (!segments[0].cues.length) segments.shift();
+    const showKeys = mapSegmentLabels(segments.map(s => s.label));
     segments.forEach((s, i) => {
       const next = segments[i + 1];
       s.title = /^transition$/i.test(s.label) ? "Transition" + (next ? " → " + next.label : "") : s.label;
-      const m = STILLS.find(([re]) => re.test(s.label));
-      s.still = m ? { id: m[1], date: m[2] } : null;
-      const key = segmentKey(s.label);
-      s.surtitles = viewLines().filter(line => line.segment === key || line.segment === s.label);
+      s.showKey = showKeys[i];
+      const published = s.showKey && stillsManifest && stillsManifest.segments && stillsManifest.segments[s.showKey];
+      s.still = published ? { id: published.unreal_id || s.showKey, date: published.captured || "", file: published.file } : fallbackStill(s.label);
+      s.surtitles = viewLines().filter(line => line.segment === s.showKey || line.segment === s.label);
     });
     if (current >= segments.length) current = Math.max(0, segments.length - 1);
   }
@@ -519,7 +545,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const b = el("button", "seg"); b.type = "button";
       b.setAttribute("aria-current", i === current ? "true" : "false");
       const th = el("div", "thumb");
-      if (s.still) th.style.backgroundImage = `url("stills/${s.still.id}.jpg")`; else th.textContent = "no still";
+      if (s.still) th.style.backgroundImage = `url("${s.still.file}")`; else th.textContent = "no still";
       const tx = el("div"); tx.style.minWidth = "0";
       tx.append(el("b", null, s.title));
       const n = s.cues.filter(matches).length;
@@ -538,7 +564,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     const h = $("hero"); h.textContent = "";
     const s = segments[current]; if (!s) return;
     const fig = el("figure", "still");
-    if (s.still) { fig.style.backgroundImage = `url("stills/${s.still.id}.jpg")`; fig.append(el("figcaption", null, `Unreal ${s.still.id} · captured ${s.still.date}`)); }
+    if (s.still) { fig.style.backgroundImage = `url("${s.still.file}")`; fig.append(el("figcaption", null, `Unreal ${s.still.id} · captured ${s.still.date}`)); }
     else { fig.classList.add("empty"); fig.textContent = /transition/i.test(s.title) ? "Transition: lights out between segments" : "No still for this segment yet"; }
     const side = el("div");
     side.append(el("div", "eyebrow", `Segment ${current + 1} of ${segments.length}`), el("h2", null, s.title));
@@ -632,6 +658,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     if (conflicts[c.key]) body.append(conflictView(c));
     if (editingKey === c.key) { body.append(editorView(c)); return card; }
     let any = false;
+    const ownStill = stillsManifest && stillsManifest.cues && stillsManifest.cues[c.key];
+    if (ownStill && ownStill.file) { any = true; const image = el("img", "cue-own-still"); image.src = ownStill.file; image.alt = `Unreal still for cue ${c.key}`; body.append(image); }
     for (const k of SPEAKERS) if (c[k]) { any = true; const l = el("div", "line " + k); l.append(el("div", "who", k), el("div", "txt", c[k])); body.append(l); }
     const dz = el("div", "depts");
     for (const k of DEPTS) if (c[k]) { any = true; const ch = el("span", "dchip d-" + k); ch.append(el("i", null, DEPT_SHORT[k]), document.createTextNode(c[k])); dz.append(ch); }
@@ -752,7 +780,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   function addLine() {
     const s = segments[current]; if (!s) return;
     const key = "T" + Date.now().toString(36).toUpperCase();
-    const line = { key, segment: segmentKey(s.label), in: "", out: "", speaker: "", text: "", notes: "" };
+    const line = { key, segment: s.showKey || s.label, in: "", out: "", speaker: "", text: "", notes: "" };
     startLineEdit(line, true);
   }
 
@@ -848,7 +876,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   function renderSurtitles(box) {
     const s = segments[current];
     if (!surtitlesSupported) { box.append(el("div", "empty-state", "Surtitles need the updated script. Cues still work; ask Gary to redeploy Code.gs.")); return; }
-    const lines = (s.surtitles || []).filter(line => line.segment === segmentKey(s.label) || line.segment === s.label);
+    const lines = (s.surtitles || []).filter(line => line.segment === s.showKey || line.segment === s.label);
     if (!lines.length) box.append(el("div", "empty-state", "No surtitles in this segment. Add a time-coded line, or leave it empty."));
     lines.forEach(line => box.append(lineView(line)));
     const add = el("button", "btn", "+ Add a surtitle line"); add.style.alignSelf = "flex-start"; add.onclick = addLine; box.append(add);
@@ -1144,7 +1172,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   if (drafts && Object.keys(drafts).length) editingKey = Object.keys(drafts)[0];
   if (lineDrafts && Object.keys(lineDrafts).length) editingLineKey = Object.keys(lineDrafts)[0];
   buildSegments(); render(); updateBar();
-  loadSegmentMap().then(() => { buildSegments(); render(); });
+  Promise.all([loadSegmentMap(), loadStillsManifest()]).then(() => { buildSegments(); render(); });
   if (!who || !pass) showGate(); else { refresh().then(flush); }
   if (outbox.length) toast(`${outbox.length} unsent change${outbox.length > 1 ? "s" : ""} from last time: sending now.`);
   window.__cuebook = { get outbox() { return outbox; }, get conflicts() { return conflicts; }, get surtitles() { return viewLines(); }, refresh, flush };
