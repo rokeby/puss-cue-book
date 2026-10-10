@@ -171,6 +171,12 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
 .print-form { display: grid; grid-template-columns: 1fr 1fr; gap: 9px }
 .print-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px }
 .print-form .wide { grid-column: 1 / -1 }
+.print-parts { border: 1px solid var(--rule); border-radius: 7px; padding: 6px 9px; margin: 0 }
+.print-parts legend { font-size: 13px }
+#printParts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px }
+#printParts label { flex-direction: row; align-items: center; gap: 4px }
+.print-still { display: block; width: 46mm; height: auto; margin: 2px 0 4px; break-inside: avoid }
+.print-cue .print-still { width: 34mm }
 .print-form select { border: 1px solid var(--rule); background: var(--paper); border-radius: 7px; padding: 6px }
 
 @page { size: A4 portrait; margin: 11mm 10mm 14mm }
@@ -322,6 +328,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     <label>From segment<select id="printFrom"><option value="">Start</option></select></label>
     <label>To segment<select id="printTo"><option value="">End</option></select></label>
     <label class="wide"><span><input id="printCuts" type="checkbox"> Include cut cues</span></label>
+    <fieldset class="wide print-parts"><legend>Parts to include (set by the preset; tick to change)</legend><div id="printParts"></div></fieldset>
+    <label class="wide"><span><input id="printStills" type="checkbox"> Still thumbnails (one per segment, plus any cue stills)</span></label>
     <div class="rowb wide"><button class="btn primary" type="submit">Print</button><button class="btn" id="printCancel" type="button">Cancel</button></div>
     <div class="ro wide" id="printStatus"></div>
   </form>
@@ -1253,12 +1261,30 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const option = el("option", null, value.label); option.value = key; preset.append(option);
     }
     if (selected && printPresets[selected]) preset.value = selected;
+    if (printPartsFor !== preset.value) syncPrintParts();
     for (const [select, first] of [[from, "Start"], [to, "End"]]) {
       const old = select.value; select.textContent = "";
       const all = el("option", null, first); all.value = ""; select.append(all);
       segments.forEach((segment, index) => { const option = el("option", null, segment.title); option.value = String(index); select.append(option); });
       if (old && Number(old) < segments.length) select.value = old;
     }
+  }
+
+  // Parts = the fields a print shows. The preset ticks its own; people can add or remove any (Gary, 10 Oct).
+  let printPartsFor = null;
+  function syncPrintParts() {
+    const preset = printPresets && printPresets[$("printPreset").value], box = $("printParts");
+    if (!preset) return;
+    printPartsFor = $("printPreset").value; box.textContent = "";
+    for (const field of Object.keys(PRINT_LABEL)) {
+      const label = el("label"), box1 = el("input"); box1.type = "checkbox"; box1.value = field;
+      box1.checked = preset.fields.includes(field); label.append(box1, document.createTextNode(PRINT_LABEL[field])); box.append(label);
+    }
+  }
+  function chosenPrintFields(preset) {
+    const ticked = [...document.querySelectorAll("#printParts input:checked")].map(input => input.value);
+    if (!document.querySelector("#printParts input")) return preset.fields;
+    return [...preset.fields.filter(field => ticked.includes(field)), ...ticked.filter(field => !preset.fields.includes(field))];
   }
 
   function selectedPrintSegments(preset) {
@@ -1282,7 +1308,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         chosen = eligible.map((cue, index) => [cue, context.has(index) && !primary.has(index), index])
           .filter(item => primary.has(item[2]) || context.has(item[2])).map(item => item.slice(0, 2));
       }
-      if (chosen.length) output.push({ title: segment.title, cues: chosen });
+      if (chosen.length) output.push({ title: segment.title, still: segment.still, cues: chosen });
     }
     return output;
   }
@@ -1292,17 +1318,22 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   }
 
   function renderPrintView(presetKey) {
-    const preset = printPresets[presetKey], host = $("printView"); host.textContent = "";
+    const preset = { ...printPresets[presetKey] }, host = $("printView"); host.textContent = "";
+    preset.fields = chosenPrintFields(printPresets[presetKey]);
+    const thumbs = $("printStills").checked;
     const actions = el("div", "print-actions"), again = el("button", "btn primary", "Print / Save as PDF"), close = el("button", "btn", "Close preview");
     again.onclick = () => window.print(); close.onclick = () => { document.body.classList.remove("print-previewing"); host.hidden = true; };
     actions.append(again, close); host.append(actions, el("h1", null, `Puss cue list — ${preset.label}`));
     const list = el("main", `print-list columns-${preset.columns || 1}`), selected = selectedPrintSegments(preset);
     for (const segment of selected) {
       const group = el("section", "print-segment"); group.append(el("h2", null, segment.title));
+      if (thumbs && segment.still && segment.still.file) { const image = el("img", "print-still"); image.src = segment.still.file; image.alt = segment.title; group.append(image); }
       for (const [cue, isContext] of segment.cues) {
         const row = el("article", "print-cue" + (isContext ? " context" : "") + (cue.cut ? " cut" : "")); row.dataset.key = cue.key;
         const identity = preset.fields.includes("key") ? `${cue.num || "·"} ${cue.key}` : (cue.num || cue.key || "·");
         row.append(el("span", "print-id", identity));
+        const cueStill = thumbs && !isContext && stillsManifest && stillsManifest.cues && stillsManifest.cues[cue.key];
+        if (cueStill && cueStill.file) { const image = el("img", "print-still"); image.src = cueStill.file; image.alt = cue.key; row.append(image); }
         if (isContext) {
           const line = el("span", "print-field"); line.append(el("b", null, "Context "), document.createTextNode(printContext(cue))); row.append(line);
         } else for (const field of preset.fields) {
@@ -1565,6 +1596,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   });
   $("bakBtn").onclick = () => togglePanel("bak", "bakBtn");
   $("printBtn").onclick = () => togglePanel("printPanel", "printBtn", populatePrintControls);
+  $("printPreset").onchange = syncPrintParts;
   $("printCancel").onclick = () => togglePanel("printPanel", "printBtn");
   $("printForm").onsubmit = event => {
     event.preventDefault();
@@ -1572,7 +1604,8 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     try {
       const count = renderPrintView($("printPreset").value);
       $("printPanel").hidden = true; $("printBtn").setAttribute("aria-expanded", "false");
-      setTimeout(() => window.print(), 0);
+      const pending = [...$("printView").querySelectorAll("img")].map(image => image.complete ? null : new Promise(done => { image.onload = image.onerror = done; })).filter(Boolean);
+      Promise.race([Promise.all(pending), new Promise(done => setTimeout(done, 4000))]).then(() => window.print());
       window.__cuebook.lastPrintCount = count;
     } catch (error) { $("printStatus").textContent = error.message; }
   };
