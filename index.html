@@ -458,7 +458,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
   let segments = [], current = ls.get("seg", 0), filter = ls.get("filter", "all"), query = "";
   let editingKey = null, editingLineKey = null, showSurtitles = ls.get("showSurtitles", false);
   let runningOrder = ls.get("runningOrder", false);
-  let lastSync = 0, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
+  let lastSync = 0, listedOnce = false, lastError = "", flushing = false, retryAt = 0, backoff = 2000, retryTimer = null;
   let log = [];
   let undoStack = ls.get(undoKey, []);
 
@@ -558,7 +558,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     try {
       const res = await call({ action: "list" });
       if (!res.ok) return handleRefused(res);
-      server = res.cues; lastSync = Date.now(); lastError = "";
+      server = res.cues; listedOnce = true; lastSync = Date.now(); lastError = "";
       surtitlesSupported = Array.isArray(res.surtitles);
       moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
       dogSupported = Array.isArray(res.fields) && DOG_KEYS.every(field => res.fields.includes(field));
@@ -578,12 +578,12 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
         || (act && act.closest && act.closest("main") && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName));
       if (!typing) render();
       updateBar();
-    } catch (e) { lastError = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection."; updateBar(); }
+    } catch (e) { lastError = e.code === "config" ? e.message : "Can't reach the cue list. Check your connection."; updateBar(); if (!server.length) render(); }
   }
 
   function handleRefused(res) {
     if (res.code === "wrong_passcode") { pass = ""; ls.del("pass"); showGate("That passcode didn't work. Ask Gary for the current one."); }
-    else { lastError = res.message || "The server refused the request."; updateBar(); }
+    else { lastError = res.message || "The server refused the request."; updateBar(); if (!server.length) render(); }
   }
 
   // Sends queued writes one at a time, oldest first. A write leaves the queue only when the server has
@@ -1189,7 +1189,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
     box.textContent = "";
     if (runningOrder) { renderRunningOrder(box); return; }
     const s = segments[current];
-    if (!s) { box.append(el("div", "empty-state", server.length ? "No segments." : "The shared cue list is empty. Gary loads it once: Backup, then Choose a backup file, then the seed file from the project.")); return; }
+    if (!s) { box.append(el("div", "empty-state", server.length ? "No segments." : !listedOnce ? ("Loading the cue list from the shared sheet… " + (lastError ? lastError + " It retries every 20 s; or reload the page." : "")) : "The shared cue list is empty. Gary loads it once: Backup, then Choose a backup file, then the seed file from the project.")); return; }
     if (showSurtitles) { renderSurtitles(box); return; }
     const shown = s.cues.filter(c => matches(c) || c.key === editingKey || conflicts[c.key]);
     if (!shown.length) box.append(el("div", "empty-state", "No cues in this segment match the filter. Choose Everything, or pick another segment on the left."));
@@ -1616,7 +1616,7 @@ main { overflow-y: auto; padding-block: 0 80px; padding-inline: 24px }
       const res = await call({ action: "list" });
       if (!res.ok) { $("gErr").hidden = false; $("gErr").textContent = res.code === "wrong_passcode" ? "That passcode didn't work." : (res.message || "The server refused."); pass = ""; return; }
       ls.set("who", who); ls.set("pass", pass);
-      server = res.cues; surtitlesSupported = Array.isArray(res.surtitles); serverLines = surtitlesSupported ? res.surtitles : [];
+      server = res.cues; listedOnce = true; surtitlesSupported = Array.isArray(res.surtitles); serverLines = surtitlesSupported ? res.surtitles : [];
       moveSupported = Array.isArray(res.actions) && res.actions.includes("move");
       dogSupported = Array.isArray(res.fields) && DOG_KEYS.every(field => res.fields.includes(field));
       lastSync = Date.now(); $("gate").hidden = true;
